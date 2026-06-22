@@ -3,6 +3,7 @@
 // This product includes software developed at Datadog (https://www.datadoghq.com/)
 // Copyright 2026 Datadog, Inc.
 
+use once_cell::sync::Lazy;
 use rustls::crypto::{ActiveKeyExchange, SharedSecret, SupportedKxGroup};
 use rustls::{Error, NamedGroup};
 use windows::core::Owned;
@@ -26,6 +27,13 @@ const MAX_SECRET_SIZE: usize = 48;
 /// * [SECP256R1]
 ///
 pub const ALL_KX_GROUPS: &[&dyn SupportedKxGroup] = &[X25519, SECP256R1, SECP384R1];
+static DEFAULT_KX_GROUPS: Lazy<Vec<&'static dyn SupportedKxGroup>> = Lazy::new(|| {
+    ALL_KX_GROUPS
+        .iter()
+        .copied()
+        .filter(|kx_group| usable_kx_group(*kx_group))
+        .collect()
+});
 
 #[derive(Debug, Copy, Clone)]
 enum KxGroup {
@@ -67,6 +75,26 @@ impl KxGroup {
     }
 }
 
+fn usable_kx_group(kx_group: &dyn SupportedKxGroup) -> bool {
+    kx_group.name() != NamedGroup::X25519 || cng_supports_x25519()
+}
+
+fn cng_supports_x25519() -> bool {
+    // Windows CNG's Curve25519 public-key import behavior differs by OS version. Windows Server
+    // 2022 accepts the X25519 Wycheproof `u = 4` vector, but Windows Server 2025 rejects it with
+    // STATUS_INVALID_PARAMETER even when the import blob includes a valid Montgomery `v`
+    // coordinate. That vector is a valid X25519 input, so a CNG backend that rejects it should not
+    // advertise X25519 for TLS negotiation. Probe the same public key shape used by the provider and
+    // leave X25519 available only on hosts whose CNG implementation can import it.
+    let u = [
+        0x04, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0,
+    ];
+    let y = [0; 32];
+
+    import_ecdh_public_key(KxGroup::X25519.alg_handle(), &u, &y).is_ok()
+}
+
 struct EcKeyExchange {
     kx_group: KxGroup,
     key_handle: Owned<BCRYPT_KEY_HANDLE>,
@@ -82,6 +110,11 @@ pub const X25519: &dyn SupportedKxGroup = &KxGroup::X25519;
 pub const SECP256R1: &dyn SupportedKxGroup = &KxGroup::SECP256R1;
 /// secp384r1 key exchange group as registered with [IANA](https://www.iana.org/assignments/tls-parameters/tls-parameters.xhtml#tls-parameters-8)
 pub const SECP384R1: &dyn SupportedKxGroup = &KxGroup::SECP384R1;
+
+/// Returns key exchange groups usable by the host CNG implementation.
+pub fn default_kx_groups() -> Vec<&'static dyn SupportedKxGroup> {
+    DEFAULT_KX_GROUPS.clone()
+}
 
 impl SupportedKxGroup for KxGroup {
     fn start(&self) -> Result<Box<dyn ActiveKeyExchange>, Error> {
@@ -250,6 +283,14 @@ mod test {
     use crate::{keys::import_ecdh_private_key, kx::EcKeyExchange};
 
     #[test]
+    fn default_kx_groups_match_cng_x25519_support() {
+        let advertises_x25519 = super::default_kx_groups()
+            .iter()
+            .any(|kx_group| kx_group.name() == rustls::NamedGroup::X25519);
+        assert_eq!(advertises_x25519, super::cng_supports_x25519());
+    }
+
+    #[test]
     fn secp256r1() {
         let test_set = wycheproof::ecdh::TestSet::load(TestName::EcdhSecp256r1Ecpoint).unwrap();
 
@@ -286,6 +327,10 @@ mod test {
 
     #[test]
     fn x25519() {
+        if !super::cng_supports_x25519() {
+            return;
+        }
+
         let test_set = wycheproof::xdh::TestSet::load(wycheproof::xdh::TestName::X25519).unwrap();
 
         let mut counter = 0;
