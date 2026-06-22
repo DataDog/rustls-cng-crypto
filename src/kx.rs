@@ -247,7 +247,10 @@ mod test {
     use windows::core::Owned;
     use wycheproof::{ecdh::TestName, TestResult};
 
-    use crate::{keys::import_ecdh_private_key, kx::EcKeyExchange};
+    use crate::{
+        keys::{import_ecdh_private_key, import_ecdh_public_key},
+        kx::EcKeyExchange,
+    };
 
     #[test]
     fn secp256r1() {
@@ -280,6 +283,52 @@ mod test {
                         assert!(res.is_err());
                     }
                 }
+            }
+        }
+    }
+
+    #[test]
+    fn x25519_cng_import_diagnostics() {
+        let cases = [
+            (
+                "tc1 normal",
+                "504a36999f489cd2fdbc08baff3d88fa00569ba986cba22548ffde80f9806829",
+                Some("98c969d09aeecfe56f44da8c143e7c739afc6d3ac26cd099a73436fec147a908"),
+                Some("08a947c1fe3634a799d06cc23a6dfc9a737c3e148cda446fe5cfee9ad069c998"),
+            ),
+            (
+                "tc2 twist",
+                "63aa40c6e38346c5caf23a6df0a5e6c80889a08647e551b3563449befcfc9733",
+                None,
+                None,
+            ),
+            (
+                "tc34 special-valid-u4",
+                "0400000000000000000000000000000000000000000000000000000000000000",
+                Some("a0d42a061659386f4553ce7564094b15d73bc8a36340191b74c1e56f8a050469"),
+                Some("6904058a6fe5c1741b194063a3c83bd7154b096475ce53456f385916062ad4a0"),
+            ),
+        ];
+        let zero_y = [0u8; 32];
+
+        for (name, x_hex, y_le_hex, y_be_hex) in cases {
+            let x = hex::decode(x_hex).unwrap();
+            println!("x25519 import diagnostic: {name}");
+
+            let zero_res =
+                import_ecdh_public_key(crate::kx::KxGroup::X25519.alg_handle(), &x, &zero_y);
+            println!("  y=zero: {:?}", zero_res.as_ref().map(|_| ()));
+
+            if let Some(y_hex) = y_le_hex {
+                let y = hex::decode(y_hex).unwrap();
+                let res = import_ecdh_public_key(crate::kx::KxGroup::X25519.alg_handle(), &x, &y);
+                println!("  y=sqrt-le: {:?}", res.as_ref().map(|_| ()));
+            }
+
+            if let Some(y_hex) = y_be_hex {
+                let y = hex::decode(y_hex).unwrap();
+                let res = import_ecdh_public_key(crate::kx::KxGroup::X25519.alg_handle(), &x, &y);
+                println!("  y=sqrt-be: {:?}", res.as_ref().map(|_| ()));
             }
         }
     }
