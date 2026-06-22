@@ -431,19 +431,16 @@ mod tests {
         #[case] alg: &dyn SignatureVerificationAlgorithm,
         #[case] name: wycheproof::ecdsa::TestName,
     ) {
-        use wycheproof::ecdsa::TestFlag;
-
         let test_set = wycheproof::ecdsa::TestSet::load(name).unwrap();
         for test_group in test_set.test_groups {
             for test in test_group.tests {
                 let res = alg.verify_signature(&test_group.key.key, &test.msg, &test.sig);
-                let expected_failure = test.flags.contains(&TestFlag::EdgeCaseShamirMultiplication);
 
-                match (&test.result, expected_failure) {
-                    (TestResult::Acceptable | TestResult::Valid, false) => {
+                match test.result {
+                    TestResult::Acceptable | TestResult::Valid => {
                         assert!(res.is_ok(), "Failed test: {test:?}");
                     }
-                    _ => {
+                    TestResult::Invalid => {
                         assert!(res.is_err(), "Failed test: {test:?}");
                     }
                 }

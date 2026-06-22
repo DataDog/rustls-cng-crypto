@@ -84,7 +84,7 @@ pub const SECP256R1: &dyn SupportedKxGroup = &KxGroup::SECP256R1;
 pub const SECP384R1: &dyn SupportedKxGroup = &KxGroup::SECP384R1;
 
 impl SupportedKxGroup for KxGroup {
-    fn start(&self) -> Result<Box<(dyn ActiveKeyExchange)>, Error> {
+    fn start(&self) -> Result<Box<dyn ActiveKeyExchange>, Error> {
         let mut key_handle = Owned::default();
 
         unsafe {
@@ -316,6 +316,7 @@ mod test {
                 let should_fail = test
                     .flags
                     .contains(&wycheproof::xdh::TestFlag::ZeroSharedSecret)
+                    || test.flags.contains(&wycheproof::xdh::TestFlag::Twist)
                     || test
                         .flags
                         .contains(&wycheproof::xdh::TestFlag::NonCanonicalPublic);
