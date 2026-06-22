@@ -1,3 +1,8 @@
+// Unless explicitly stated otherwise all files in this repository are licensed under the MIT License.
+//
+// This product includes software developed at Datadog (https://www.datadoghq.com/)
+// Copyright 2026 Datadog, Inc.
+
 //! Util for creating test servers, adapted from <https://github.com/rustls/rustls/blob/20de56876d8bc45224c351339337c61126c1c954/provider-example/examples/server.rs#L58>
 use std::io::Write;
 use std::sync::Arc;

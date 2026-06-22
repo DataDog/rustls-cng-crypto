@@ -1,3 +1,8 @@
+// Unless explicitly stated otherwise all files in this repository are licensed under the MIT License.
+//
+// This product includes software developed at Datadog (https://www.datadoghq.com/)
+// Copyright 2026 Datadog, Inc.
+
 use crate::hash::{SHA256, SHA384, SHA512};
 use crate::keys::{import_ecdsa_private_key, KeyWrapper};
 use pkcs1::der::Decode as _;

@@ -1,3 +1,8 @@
+// Unless explicitly stated otherwise all files in this repository are licensed under the MIT License.
+//
+// This product includes software developed at Datadog (https://www.datadoghq.com/)
+// Copyright 2026 Datadog, Inc.
+
 use crate::hash::Algorithm as HashAlgorithm;
 use rustls::crypto::hash::Hash as _;
 use rustls::crypto::hmac::{Hmac as _, Tag};

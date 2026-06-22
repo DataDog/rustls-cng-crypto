@@ -1,3 +1,8 @@
+# Unless explicitly stated otherwise all files in this repository are licensed under the MIT License.
+#
+# This product includes software developed at Datadog (https://www.datadoghq.com/)
+# Copyright 2026 Datadog, Inc.
+
 .DEFAULT_GOAL := help
 
 export CARGO_TOOL_VERSION_dd-rust-license-tool ?= 1.0.6
