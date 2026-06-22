@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Security vulnerability report
+    url: https://www.datadoghq.com/security/
+    about: Please report security vulnerabilities privately through Datadog's security channel.

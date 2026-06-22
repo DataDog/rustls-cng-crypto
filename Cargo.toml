@@ -5,8 +5,8 @@ version = "0.1.2"
 edition = "2021"
 license = "MIT"
 description = "Rustls crypto provider for CNG"
-homepage = "https://github.com/tofay/rustls-cng-crypto"
-repository = "https://github.com/tofay/rustls-cng-crypto"
+homepage = "https://github.com/DataDog/rustls-cng-crypto"
+repository = "https://github.com/DataDog/rustls-cng-crypto"
 readme = "README.md"
 
 [dependencies]
