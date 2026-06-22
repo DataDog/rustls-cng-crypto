@@ -1,0 +1,17 @@
+# Unless explicitly stated otherwise all files in this repository are licensed under the MIT License.
+#
+# This product includes software developed at Datadog (https://www.datadoghq.com/)
+# Copyright 2026 Datadog, Inc.
+
+# Docs: https://datadoghq.atlassian.net/wiki/spaces/SECENG/pages/5138645099/User+guide+dd-octo-sts
+issuer: https://token.actions.githubusercontent.com
+
+subject: repo:DataDog/rustls-cng-crypto:pull_request
+
+claim_pattern:
+  event_name: pull_request
+  head_ref: renovate/.*
+  job_workflow_ref: DataDog/rustls-cng-crypto/\.github/workflows/renovate-sync-licenses\.yml@refs/pull/[0-9]+/merge
+
+permissions:
+  contents: write

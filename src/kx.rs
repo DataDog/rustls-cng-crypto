@@ -1,3 +1,8 @@
+// Unless explicitly stated otherwise all files in this repository are licensed under the MIT License.
+//
+// This product includes software developed at Datadog (https://www.datadoghq.com/)
+// Copyright 2026 Datadog, Inc.
+
 use rustls::crypto::{ActiveKeyExchange, SharedSecret, SupportedKxGroup};
 use rustls::{Error, NamedGroup};
 use windows::core::Owned;
@@ -79,7 +84,7 @@ pub const SECP256R1: &dyn SupportedKxGroup = &KxGroup::SECP256R1;
 pub const SECP384R1: &dyn SupportedKxGroup = &KxGroup::SECP384R1;
 
 impl SupportedKxGroup for KxGroup {
-    fn start(&self) -> Result<Box<(dyn ActiveKeyExchange)>, Error> {
+    fn start(&self) -> Result<Box<dyn ActiveKeyExchange>, Error> {
         let mut key_handle = Owned::default();
 
         unsafe {

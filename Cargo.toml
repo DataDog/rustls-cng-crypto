@@ -1,3 +1,8 @@
+# Unless explicitly stated otherwise all files in this repository are licensed under the MIT License.
+#
+# This product includes software developed at Datadog (https://www.datadoghq.com/)
+# Copyright 2026 Datadog, Inc.
+
 [package]
 name = "rustls-cng-crypto"
 authors = ["Tom Fay <tom@teamfay.co.uk>"]
@@ -5,8 +10,8 @@ version = "0.1.2"
 edition = "2021"
 license = "MIT"
 description = "Rustls crypto provider for CNG"
-homepage = "https://github.com/tofay/rustls-cng-crypto"
-repository = "https://github.com/tofay/rustls-cng-crypto"
+homepage = "https://github.com/DataDog/rustls-cng-crypto"
+repository = "https://github.com/DataDog/rustls-cng-crypto"
 readme = "README.md"
 
 [dependencies]

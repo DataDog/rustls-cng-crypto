@@ -1,0 +1,93 @@
+# Unless explicitly stated otherwise all files in this repository are licensed under the MIT License.
+#
+# This product includes software developed at Datadog (https://www.datadoghq.com/)
+# Copyright 2026 Datadog, Inc.
+
+# rustls-cng-crypto maintains a LICENSE-3rdparty.csv file listing every third-party dependency and its license.
+# The license CI check verifies that this file is in sync with Cargo.lock. Renovate updates Cargo.lock
+# when it bumps dependency versions, but it has no way to regenerate the license file because that
+# requires running dd-rust-license-tool.
+#
+# This workflow detects Renovate PRs, regenerates LICENSE-3rdparty.csv, and pushes a signed commit
+# back to the PR branch so license checks pass without human intervention. Human reviewers still see
+# and review the license file changes.
+
+name: "Renovate: Sync Third-Party Licenses"
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+jobs:
+  sync-licenses:
+    runs-on: ubuntu-latest
+
+    if: >
+      github.actor == 'renovate[bot]' &&
+      startsWith(github.head_ref, 'renovate/')
+
+    timeout-minutes: 15
+
+    permissions:
+      id-token: write
+
+    steps:
+      - name: Get access token from dd-octo-sts
+        uses: DataDog/dd-octo-sts-action@96a25462dbcb10ebf0bfd6e2ccc917d2ab235b9a # v1.0.4
+        id: octo-sts
+        with:
+          scope: DataDog/rustls-cng-crypto
+          policy: self.renovate-sync-licenses
+
+      - name: Checkout PR branch
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          ref: ${{ github.head_ref }}
+          token: "${{ steps.octo-sts.outputs.token }}"
+
+      - name: Set up Rust toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@46268bd060767258de96ed93c1251119784f2ab6 # v1.16
+        with:
+          cache: false
+          rustflags: ""
+
+      - name: Install dd-rust-license-tool
+        run: |
+          TOOL_VERSION=$(grep 'CARGO_TOOL_VERSION_dd-rust-license-tool' Makefile | head -1 | sed 's/.*?= //')
+          cargo install "dd-rust-license-tool@${TOOL_VERSION}"
+
+      - name: Sync third-party license file
+        run: $HOME/.cargo/bin/dd-rust-license-tool write
+
+      - name: Check for changes
+        id: changes
+        run: |
+          if git diff --quiet LICENSE-3rdparty.csv; then
+            echo "changed=false" >> $GITHUB_OUTPUT
+          else
+            echo "changed=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Configure Git
+        if: steps.changes.outputs.changed == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Commit changes
+        id: commit
+        if: steps.changes.outputs.changed == 'true'
+        run: |
+          git add LICENSE-3rdparty.csv
+          git commit -m "chore(deps): sync third-party license file"
+          echo "commit_sha=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
+
+      - name: Sign and push commit
+        if: steps.changes.outputs.changed == 'true'
+        uses: DataDog/commit-headless@5a0f3876e0fbdd3a86b3e008acf4ec562db59eee # v2.0.1
+        with:
+          token: "${{ steps.octo-sts.outputs.token }}"
+          branch: ${{ github.head_ref }}
+          head-sha: ${{ github.event.pull_request.head.sha }}
+          command: push
+          commits: "${{ steps.commit.outputs.commit_sha }}"
