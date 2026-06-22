@@ -1,4 +1,3 @@
-
 name: CI
 on:
   push:
@@ -11,6 +10,21 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  license:
+    name: License Inventory
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Install toolchain
+        uses: dtolnay/rust-toolchain@v1
+        with:
+          toolchain: stable
+      - name: Cache build artifacts
+        uses: Swatinem/rust-cache@v2
+      - name: Check third-party license inventory
+        run: make check-licenses
+
   test:
     name: Test
     runs-on: windows-latest
@@ -28,6 +42,7 @@ jobs:
       # https://github.com/rust-lang/cargo/issues/6669
       - name: cargo test --doc
         run: cargo test --doc
+
   lint:
     name: Lint
     runs-on: windows-latest
@@ -47,7 +62,6 @@ jobs:
         run: cargo clippy --all-targets -- -D warnings
       - name: cargo clippy --no-default-features (warnings)
         run: cargo clippy --no-default-features --all-targets -- -D warnings
-
 
   coverage:
     name: Coverage
