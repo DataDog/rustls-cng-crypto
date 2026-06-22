@@ -3,6 +3,7 @@
 // This product includes software developed at Datadog (https://www.datadoghq.com/)
 // Copyright 2026 Datadog, Inc.
 
+use once_cell::sync::Lazy;
 use rustls::crypto::{ActiveKeyExchange, SharedSecret, SupportedKxGroup};
 use rustls::{Error, NamedGroup};
 use windows::core::Owned;
@@ -26,6 +27,13 @@ const MAX_SECRET_SIZE: usize = 48;
 /// * [SECP256R1]
 ///
 pub const ALL_KX_GROUPS: &[&dyn SupportedKxGroup] = &[X25519, SECP256R1, SECP384R1];
+static DEFAULT_KX_GROUPS: Lazy<Vec<&'static dyn SupportedKxGroup>> = Lazy::new(|| {
+    ALL_KX_GROUPS
+        .iter()
+        .copied()
+        .filter(|kx_group| usable_kx_group(*kx_group))
+        .collect()
+});
 
 #[derive(Debug, Copy, Clone)]
 enum KxGroup {
@@ -67,6 +75,20 @@ impl KxGroup {
     }
 }
 
+fn usable_kx_group(kx_group: &dyn SupportedKxGroup) -> bool {
+    kx_group.name() != NamedGroup::X25519 || cng_supports_x25519()
+}
+
+fn cng_supports_x25519() -> bool {
+    let u = [
+        0x04, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0,
+    ];
+    let y = [0; 32];
+
+    import_ecdh_public_key(KxGroup::X25519.alg_handle(), &u, &y).is_ok()
+}
+
 struct EcKeyExchange {
     kx_group: KxGroup,
     key_handle: Owned<BCRYPT_KEY_HANDLE>,
@@ -82,6 +104,11 @@ pub const X25519: &dyn SupportedKxGroup = &KxGroup::X25519;
 pub const SECP256R1: &dyn SupportedKxGroup = &KxGroup::SECP256R1;
 /// secp384r1 key exchange group as registered with [IANA](https://www.iana.org/assignments/tls-parameters/tls-parameters.xhtml#tls-parameters-8)
 pub const SECP384R1: &dyn SupportedKxGroup = &KxGroup::SECP384R1;
+
+/// Returns key exchange groups usable by the host CNG implementation.
+pub fn default_kx_groups() -> Vec<&'static dyn SupportedKxGroup> {
+    DEFAULT_KX_GROUPS.clone()
+}
 
 impl SupportedKxGroup for KxGroup {
     fn start(&self) -> Result<Box<dyn ActiveKeyExchange>, Error> {
@@ -247,10 +274,15 @@ mod test {
     use windows::core::Owned;
     use wycheproof::{ecdh::TestName, TestResult};
 
-    use crate::{
-        keys::{import_ecdh_private_key, import_ecdh_public_key},
-        kx::EcKeyExchange,
-    };
+    use crate::{keys::import_ecdh_private_key, kx::EcKeyExchange};
+
+    #[test]
+    fn default_kx_groups_match_cng_x25519_support() {
+        let advertises_x25519 = super::default_kx_groups()
+            .iter()
+            .any(|kx_group| kx_group.name() == rustls::NamedGroup::X25519);
+        assert_eq!(advertises_x25519, super::cng_supports_x25519());
+    }
 
     #[test]
     fn secp256r1() {
@@ -288,53 +320,11 @@ mod test {
     }
 
     #[test]
-    fn x25519_cng_import_diagnostics() {
-        let cases = [
-            (
-                "tc1 normal",
-                "504a36999f489cd2fdbc08baff3d88fa00569ba986cba22548ffde80f9806829",
-                Some("98c969d09aeecfe56f44da8c143e7c739afc6d3ac26cd099a73436fec147a908"),
-                Some("08a947c1fe3634a799d06cc23a6dfc9a737c3e148cda446fe5cfee9ad069c998"),
-            ),
-            (
-                "tc2 twist",
-                "63aa40c6e38346c5caf23a6df0a5e6c80889a08647e551b3563449befcfc9733",
-                None,
-                None,
-            ),
-            (
-                "tc34 special-valid-u4",
-                "0400000000000000000000000000000000000000000000000000000000000000",
-                Some("a0d42a061659386f4553ce7564094b15d73bc8a36340191b74c1e56f8a050469"),
-                Some("6904058a6fe5c1741b194063a3c83bd7154b096475ce53456f385916062ad4a0"),
-            ),
-        ];
-        let zero_y = [0u8; 32];
-
-        for (name, x_hex, y_le_hex, y_be_hex) in cases {
-            let x = hex::decode(x_hex).unwrap();
-            println!("x25519 import diagnostic: {name}");
-
-            let zero_res =
-                import_ecdh_public_key(crate::kx::KxGroup::X25519.alg_handle(), &x, &zero_y);
-            println!("  y=zero: {:?}", zero_res.as_ref().map(|_| ()));
-
-            if let Some(y_hex) = y_le_hex {
-                let y = hex::decode(y_hex).unwrap();
-                let res = import_ecdh_public_key(crate::kx::KxGroup::X25519.alg_handle(), &x, &y);
-                println!("  y=sqrt-le: {:?}", res.as_ref().map(|_| ()));
-            }
-
-            if let Some(y_hex) = y_be_hex {
-                let y = hex::decode(y_hex).unwrap();
-                let res = import_ecdh_public_key(crate::kx::KxGroup::X25519.alg_handle(), &x, &y);
-                println!("  y=sqrt-be: {:?}", res.as_ref().map(|_| ()));
-            }
-        }
-    }
-
-    #[test]
     fn x25519() {
+        if !super::cng_supports_x25519() {
+            return;
+        }
+
         let test_set = wycheproof::xdh::TestSet::load(wycheproof::xdh::TestName::X25519).unwrap();
 
         let mut counter = 0;

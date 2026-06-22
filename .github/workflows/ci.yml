@@ -47,8 +47,6 @@ jobs:
           toolchain: stable
       - name: Cache build artifacts
         uses: Swatinem/rust-cache@42dc69e1aa15d09112580998cf2ef0119e2e91ae # v2
-      - name: X25519 CNG import diagnostics
-        run: cargo test x25519_cng_import_diagnostics -- --nocapture
       - name: cargo test
         run: cargo test
       # https://github.com/rust-lang/cargo/issues/6669
