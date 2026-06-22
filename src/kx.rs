@@ -316,7 +316,6 @@ mod test {
                 let should_fail = test
                     .flags
                     .contains(&wycheproof::xdh::TestFlag::ZeroSharedSecret)
-                    || test.flags.contains(&wycheproof::xdh::TestFlag::Twist)
                     || test
                         .flags
                         .contains(&wycheproof::xdh::TestFlag::NonCanonicalPublic);
