@@ -80,6 +80,12 @@ fn usable_kx_group(kx_group: &dyn SupportedKxGroup) -> bool {
 }
 
 fn cng_supports_x25519() -> bool {
+    // Windows CNG's Curve25519 public-key import behavior differs by OS version. Windows Server
+    // 2022 accepts the X25519 Wycheproof `u = 4` vector, but Windows Server 2025 rejects it with
+    // STATUS_INVALID_PARAMETER even when the import blob includes a valid Montgomery `v`
+    // coordinate. That vector is a valid X25519 input, so a CNG backend that rejects it should not
+    // advertise X25519 for TLS negotiation. Probe the same public key shape used by the provider and
+    // leave X25519 available only on hosts whose CNG implementation can import it.
     let u = [
         0x04, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
         0, 0, 0,
