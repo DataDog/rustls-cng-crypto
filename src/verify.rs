@@ -327,7 +327,10 @@ impl<const HASH_SIZE: usize> SignatureVerificationAlgorithm for VerificationAlgo
                                 BCRYPT_PAD_PSS,
                             )
                             .ok()
-                            .map_err(|_| InvalidSignature)
+                            .map_err(|e| {
+                                dbg!(e);
+                                InvalidSignature
+                            })
                         }
                     }
                 }

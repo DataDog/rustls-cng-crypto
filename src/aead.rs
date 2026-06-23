@@ -12,7 +12,6 @@ use windows::Win32::Security::Cryptography::{
     BCRYPT_AUTHENTICATED_CIPHER_MODE_INFO_VERSION, BCRYPT_CHACHA20_POLY1305_ALG_HANDLE,
     BCRYPT_FLAGS, BCRYPT_KEY_HANDLE,
 };
-use zeroize::Zeroizing;
 
 /// The tag length is 16 bytes for all supported ciphers.
 pub(crate) const TAG_LEN: usize = 16;
@@ -114,13 +113,14 @@ impl AeadKey {
             ..Default::default()
         };
 
-        let input = Zeroizing::new(data.to_vec());
         unsafe {
+            // SAFETY: CNG supports in-place encryption, so the input and output buffers can be the same.
             let mut size = 0u32;
+            let input = std::slice::from_raw_parts(data.as_ptr().cast(), data.len());
 
             BCryptEncrypt(
                 *self.handle,
-                Some(input.as_slice()),
+                Some(input),
                 Some(std::ptr::from_ref(&info) as *mut _),
                 None,
                 Some(data),
@@ -161,11 +161,14 @@ impl AeadKey {
 
         let mut size = 0u32;
 
-        let input = ciphertext.to_vec();
         unsafe {
+            // SAFETY: CNG supports in-place decryption, so the input and output buffers can be the same.
+
+            let input = std::slice::from_raw_parts(ciphertext.as_ptr().cast(), ciphertext.len());
+
             BCryptDecrypt(
                 *self.handle,
-                Some(&input),
+                Some(input),
                 Some(std::ptr::from_ref(&info) as *mut _),
                 None,
                 Some(ciphertext),

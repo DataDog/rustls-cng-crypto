@@ -16,7 +16,6 @@ use windows::{
         BCRYPT_RSAPUBLIC_MAGIC, BCRYPT_RSA_ALG_HANDLE,
     },
 };
-use zeroize::Zeroizing;
 
 /// Wrapper for an owned key handle that can be sent between threads.
 #[derive(Debug)]
@@ -48,7 +47,7 @@ pub(crate) fn import_rsa_private_key(
         + prime1.len()
         + prime2.len();
 
-    let mut blob = Zeroizing::new(Vec::with_capacity(size));
+    let mut blob = Vec::with_capacity(size);
     unsafe {
         let p: *const BCRYPT_RSAKEY_BLOB = &header;
         let p: *const u8 = p.cast::<u8>();
@@ -68,7 +67,7 @@ pub(crate) fn import_rsa_private_key(
             None,
             BCRYPT_RSAPRIVATE_BLOB,
             &mut *key_handle,
-            blob.as_slice(),
+            &blob,
             0,
         )
         .ok()
@@ -147,14 +146,14 @@ fn import_ec_private_key(
         cbKey: key_len as u32,
     };
     let header_size = core::mem::size_of::<BCRYPT_ECCKEY_BLOB>();
-    let mut blob = Zeroizing::new(Vec::with_capacity(header_size + key_len * 3));
+    let mut blob = Vec::with_capacity(header_size + key_len * 3);
     unsafe {
         let p: *const BCRYPT_ECCKEY_BLOB = &header;
         let p: *const u8 = p.cast::<u8>();
         let slice = std::slice::from_raw_parts(p, header_size);
         blob.extend_from_slice(slice);
     }
-    blob.extend(std::iter::repeat_n(0, key_len * 2));
+    blob.extend_from_slice(&vec![0u8; key_len * 2]);
     blob.extend_from_slice(private_key);
     let mut key_handle = Owned::default();
     unsafe {
@@ -163,7 +162,7 @@ fn import_ec_private_key(
             None,
             BCRYPT_ECCPRIVATE_BLOB,
             &mut *key_handle,
-            blob.as_slice(),
+            &blob,
             0,
         )
         .ok()
