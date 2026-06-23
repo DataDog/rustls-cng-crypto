@@ -134,6 +134,15 @@ fn test_with_provider(
         CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256
     )
 )]
+#[cfg_attr(
+    feature = "tls12",
+    case::tls_ecdhe_ecdsa_with_aes_256_gcm_sha384(
+        rustls_cng_crypto::cipher_suite::TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
+        rustls_cng_crypto::kx_group::SECP256R1,
+        &rcgen::PKCS_ECDSA_P256_SHA256,
+        CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384
+    )
+)]
 // #[cfg_attr(
 //     feature = "tls12",
 //     case::ed25519_tls12(

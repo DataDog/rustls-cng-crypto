@@ -162,10 +162,7 @@ impl<const HASH_SIZE: usize> RustlsHkdfExpander for HkdfExpander<HASH_SIZE> {
         unsafe {
             BCryptKeyDerivation(*self.key_handle, Some(&params), output, &mut size, 0)
                 .ok()
-                .map_err(|e| {
-                    dbg!(e);
-                    OutputLengthError
-                })?;
+                .map_err(|_| OutputLengthError)?;
         };
         if size != output.len() as u32 {
             return Err(OutputLengthError);

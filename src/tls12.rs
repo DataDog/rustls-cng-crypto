@@ -108,7 +108,7 @@ pub static TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384: SupportedCipherSuite =
         },
         kx: KeyExchangeAlgorithm::ECDHE,
         sign: ECDSA_SCHEMES,
-        aead_alg: &aead::AES_128_GCM,
+        aead_alg: &aead::AES_256_GCM,
         prf_provider: &Prf(SHA384),
     });
 
@@ -337,5 +337,32 @@ impl MessageDecrypter for ChaCha20Poly1305Crypter {
         let plaintext_len = self.key.open(nonce.0, &aad, payload)?;
         payload.truncate(plaintext_len);
         Ok(msg.into_plain_message())
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use rustls::crypto::cipher::Tls12AeadAlgorithm;
+    use rustls::SupportedCipherSuite;
+
+    use super::{TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384, TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384};
+
+    #[test]
+    fn tls12_aes256_gcm_suites_use_32_byte_keys() {
+        for suite in [
+            TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+            TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
+        ] {
+            let SupportedCipherSuite::Tls12(suite) = suite else {
+                panic!("expected a TLS 1.2 cipher suite");
+            };
+
+            assert_eq!(
+                suite.aead_alg.key_block_shape().enc_key_len,
+                32,
+                "{:?} should derive 32-byte AES-256-GCM keys",
+                suite.common.suite
+            );
+        }
     }
 }

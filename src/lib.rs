@@ -51,6 +51,12 @@
 //! Use [`default_provider()`] to create a provider using cipher suites and key exchange groups listed above.
 //! Use [`custom_provider()`] to specify custom cipher suites and key exchange groups.
 //!
+//! CNG algorithm provider handles cached by this crate are process-lifetime values; there is no public shutdown handle to construct.
+//!
+//! ```compile_fail
+//! let _ = rustls_cng_crypto::ShutdownHandle {};
+//! ```
+//!
 //! # Features
 //! - `tls12`: Enables TLS 1.2 cipher suites. Enabled by default.
 //! - `fips`: Changes the default provider to use FIPS-approved cipher suites and key exchange groups. See [fips].
@@ -91,7 +97,6 @@ pub mod cipher_suite {
     pub use super::tls13::{TLS13_AES_128_GCM_SHA256, TLS13_AES_256_GCM_SHA384};
 }
 
-pub use alg::ShutdownHandle;
 #[cfg(feature = "fips")]
 pub use fips::provider as default_provider;
 pub use fips::provider as fips_provider;

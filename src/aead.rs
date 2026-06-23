@@ -128,7 +128,7 @@ impl AeadKey {
                 BCRYPT_FLAGS::default(),
             )
             .ok()
-            .map_err(|e| Error::General(format!("AEAD encrypt error: {e}")))?;
+            .map_err(|_| Error::EncryptError)?;
         }
         Ok(tag)
     }
@@ -176,7 +176,7 @@ impl AeadKey {
                 BCRYPT_FLAGS::default(),
             )
             .ok()
-            .map_err(|e| Error::General(format!("AEAD decrypt error: {e}")))?;
+            .map_err(|_| Error::DecryptError)?;
         }
         size.try_into().map_err(|_| Error::DecryptError)
     }
@@ -186,6 +186,7 @@ impl AeadKey {
 mod test {
 
     use crate::aead::{Algorithm, AES_128_GCM, AES_256_GCM, CHACHA20_POLY1305};
+    use rustls::Error;
     use wycheproof::{
         aead::{TestFlag, TestName},
         TestResult,
@@ -253,7 +254,7 @@ mod test {
 
                 match &test.result {
                     TestResult::Invalid => {
-                        assert!(res.is_err());
+                        assert_eq!(res, Err(Error::DecryptError));
                     }
                     TestResult::Valid | TestResult::Acceptable => {
                         assert_eq!(res, Ok(test.pt.len()));
