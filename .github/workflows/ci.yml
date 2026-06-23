@@ -31,9 +31,28 @@ jobs:
       - name: Check third-party license inventory
         run: make check-licenses
 
+  license-policy:
+    name: License Policy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - name: Install toolchain
+        uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
+        with:
+          toolchain: stable
+      - name: Cache build artifacts
+        uses: Swatinem/rust-cache@42dc69e1aa15d09112580998cf2ef0119e2e91ae # v2
+      - name: Check dependency license policy
+        run: make check-deny
+
   test:
-    name: Test
-    runs-on: windows-2022
+    name: Test (${{ matrix.runner }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [windows-2022, windows-2025]
     steps:
       - name: Check out repository
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
