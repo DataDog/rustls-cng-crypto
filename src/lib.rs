@@ -91,7 +91,6 @@ pub mod cipher_suite {
     pub use super::tls13::{TLS13_AES_128_GCM_SHA256, TLS13_AES_256_GCM_SHA384};
 }
 
-pub use alg::ShutdownHandle;
 #[cfg(feature = "fips")]
 pub use fips::provider as default_provider;
 pub use fips::provider as fips_provider;

@@ -3,10 +3,9 @@
 // This product includes software developed at Datadog (https://www.datadoghq.com/)
 // Copyright 2026 Datadog, Inc.
 
-//! Algorithm provider initialization and cleanup.
+//! Algorithm provider initialization.
 use once_cell::sync::OnceCell;
 use rustls::Error;
-use windows::core::Free;
 #[cfg(feature = "tls12")]
 use windows::Win32::Security::Cryptography::BCRYPT_TLS1_2_KDF_ALGORITHM;
 use windows::Win32::Security::Cryptography::{
@@ -18,42 +17,25 @@ use windows::{
     Win32::Security::Cryptography::{BCRYPT_ALG_HANDLE, BCRYPT_OPEN_ALGORITHM_PROVIDER_FLAGS},
 };
 
-/// A handle that, when dropped, will free all algorithm providers initialized by this crate.
-///
-/// Where possible this crate aims to use the shared providers described in
-/// <https://learn.microsoft.com/en-us/windows/win32/seccng/cng-algorithm-pseudo-handles>.
-///
-/// This should be created once at the start of the program and dropped at the end.
-pub struct ShutdownHandle {}
-
-impl Drop for ShutdownHandle {
-    fn drop(&mut self) {
-        unsafe {
-            ecdh_x25519().free();
-            #[cfg(feature = "tls12")]
-            tls12_kdf().free();
-        }
-    }
-}
-
 struct Handle(BCRYPT_ALG_HANDLE);
 unsafe impl Send for Handle {}
 unsafe impl Sync for Handle {}
 
-pub(crate) fn ecdh_x25519() -> BCRYPT_ALG_HANDLE {
-    static ALG_HANDLE: OnceCell<Handle> = OnceCell::new();
+pub(crate) fn ecdh_x25519() -> Result<BCRYPT_ALG_HANDLE, Error> {
+    static ALG_HANDLE: OnceCell<Option<Handle>> = OnceCell::new();
     ALG_HANDLE
         .get_or_init(|| {
-            Handle(
-                load_algorithm(
-                    BCRYPT_ECDH_ALGORITHM,
-                    BCRYPT_OPEN_ALGORITHM_PROVIDER_FLAGS::default(),
-                    Some((BCRYPT_ECC_CURVE_NAME, BCRYPT_ECC_CURVE_25519)),
-                )
-                .unwrap(),
+            load_algorithm(
+                BCRYPT_ECDH_ALGORITHM,
+                BCRYPT_OPEN_ALGORITHM_PROVIDER_FLAGS::default(),
+                Some((BCRYPT_ECC_CURVE_NAME, BCRYPT_ECC_CURVE_25519)),
             )
+            .ok()
+            .map(Handle)
         })
-        .0
+        .as_ref()
+        .map(|handle| handle.0)
+        .ok_or_else(|| Error::General("CNG X25519 algorithm provider unavailable".into()))
 }
 
 #[cfg(feature = "tls12")]
