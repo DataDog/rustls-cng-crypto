@@ -130,7 +130,7 @@ pub use verify::SUPPORTED_SIG_ALGS;
 pub fn default_provider() -> CryptoProvider {
     CryptoProvider {
         cipher_suites: ALL_CIPHER_SUITES.to_vec(),
-        kx_groups: ALL_KX_GROUPS.to_vec(),
+        kx_groups: kx::default_kx_groups(),
         signature_verification_algorithms: SUPPORTED_SIG_ALGS,
         secure_random: &SecureRandom,
         key_provider: &KeyProvider,

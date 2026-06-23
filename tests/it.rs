@@ -19,6 +19,13 @@ use webpki::EndEntityCert;
 
 pub mod server;
 
+fn cng_supports_group(group: &'static dyn SupportedKxGroup) -> bool {
+    default_provider()
+        .kx_groups
+        .iter()
+        .any(|supported| supported.name() == group.name())
+}
+
 fn test_with_provider(
     provider: CryptoProvider,
     port: u16,
@@ -157,6 +164,10 @@ fn test_client_and_server(
     #[case] alg: &'static rcgen::SignatureAlgorithm,
     #[case] expected: CipherSuite,
 ) {
+    if !cng_supports_group(group) {
+        return;
+    }
+
     // Run against a server using our default provider
     let (port, certificate) = start_server(alg);
     let provider = custom_provider(vec![suite], vec![group]);

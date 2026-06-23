@@ -437,13 +437,21 @@ mod tests {
         for test_group in test_set.test_groups {
             for test in test_group.tests {
                 let res = alg.verify_signature(&test_group.key.key, &test.msg, &test.sig);
-                let expected_failure = test.flags.contains(&TestFlag::EdgeCaseShamirMultiplication);
 
-                match (&test.result, expected_failure) {
-                    (TestResult::Acceptable | TestResult::Valid, false) => {
+                if test.result == TestResult::Valid
+                    && test.flags.contains(&TestFlag::EdgeCaseShamirMultiplication)
+                {
+                    // Windows CNG versions differ on these valid arithmetic edge cases:
+                    // Windows Server 2022 rejects them, while Windows Server 2025 accepts them.
+                    // Invalid signatures below must still be rejected.
+                    continue;
+                }
+
+                match test.result {
+                    TestResult::Acceptable | TestResult::Valid => {
                         assert!(res.is_ok(), "Failed test: {test:?}");
                     }
-                    _ => {
+                    TestResult::Invalid => {
                         assert!(res.is_err(), "Failed test: {test:?}");
                     }
                 }
