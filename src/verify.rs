@@ -35,8 +35,9 @@ pub static SUPPORTED_SIG_ALGS: WebPkiSupportedAlgorithms = WebPkiSupportedAlgori
         RSA_PSS_SHA512,
         RSA_PSS_SHA384,
         RSA_PSS_SHA256,
-        // RFC 4055 requires accepting sha*WithRSAEncryption AlgorithmIdentifiers both with
-        // explicit NULL parameters and with parameters absent in certificate signatures.
+        // RFC 4055 section 2.1 requires accepting hash AlgorithmIdentifiers both with
+        // explicit NULL parameters and with parameters absent; rustls-webpki registers both
+        // forms for RSA PKCS#1 certificate signatures.
         RSA_PKCS1_SHA512,
         RSA_PKCS1_SHA512_ABSENT_PARAMS,
         RSA_PKCS1_SHA384,
@@ -251,6 +252,7 @@ enum Params {
 unsafe impl Send for Params {}
 unsafe impl Sync for Params {}
 
+// Match rustls-webpki's RSA verification algorithms, which are defined for 2048-8192-bit keys.
 const RSA_MIN_MODULUS_BITS: usize = 2048;
 const RSA_MAX_MODULUS_BITS: usize = 8192;
 
