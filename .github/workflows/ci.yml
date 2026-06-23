@@ -87,6 +87,12 @@ jobs:
         run: cargo clippy --all-targets -- -D warnings
       - name: cargo clippy --no-default-features (warnings)
         run: cargo clippy --no-default-features --all-targets -- -D warnings
+      - name: cargo clippy --features fips (warnings)
+        run: cargo clippy --features fips --all-targets -- -D warnings
+      - name: cargo doc (warnings)
+        run: cargo doc --no-deps
+        env:
+          RUSTDOCFLAGS: -D warnings
 
   coverage:
     name: Coverage

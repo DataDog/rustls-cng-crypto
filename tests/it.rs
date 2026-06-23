@@ -189,6 +189,7 @@ fn test_client_and_server(
     rustls_cng_crypto::kx_group::SECP384R1,
     CipherSuite::TLS13_AES_256_GCM_SHA384
 )]
+#[ignore = "requires live access to index.crates.io"]
 fn test_to_internet(
     #[case] suite: SupportedCipherSuite,
     #[case] group: &'static dyn SupportedKxGroup,
