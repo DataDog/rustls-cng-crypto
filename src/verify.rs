@@ -445,7 +445,8 @@ mod tests {
         append_der_len(&mut sequence, der.len());
         sequence.extend_from_slice(&der);
 
-        RsaPublicKey::try_from(Box::leak(sequence.into_boxed_slice()).as_ref()).unwrap()
+        let sequence: &'static [u8] = Box::leak(sequence.into_boxed_slice());
+        RsaPublicKey::try_from(sequence).unwrap()
     }
 
     fn modulus_with_bit_len(bit_len: usize) -> Vec<u8> {
