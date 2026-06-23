@@ -262,7 +262,9 @@ fn rsa_modulus_bit_len(modulus: &[u8]) -> usize {
         return 0;
     };
 
-    (modulus.len() - 1) * 8 + (u8::BITS as usize - first.leading_zeros() as usize)
+    let first_byte_bits =
+        usize::try_from(u8::BITS - first.leading_zeros()).expect("u8 bit width fits in usize");
+    (modulus.len() - 1) * 8 + first_byte_bits
 }
 
 #[derive(Debug)]
@@ -471,7 +473,7 @@ mod tests {
 
     fn append_der_len(der: &mut Vec<u8>, len: usize) {
         if len < 128 {
-            der.push(len as u8);
+            der.push(u8::try_from(len).expect("short-form DER length fits in u8"));
             return;
         }
 
@@ -480,7 +482,9 @@ mod tests {
             .iter()
             .position(|byte| *byte != 0)
             .unwrap_or(len_bytes.len() - 1);
-        der.push(0x80 | (len_bytes.len() - first) as u8);
+        let len_len =
+            u8::try_from(len_bytes.len() - first).expect("usize DER length-of-length fits in u8");
+        der.push(0x80 | len_len);
         der.extend_from_slice(&len_bytes[first..]);
     }
 

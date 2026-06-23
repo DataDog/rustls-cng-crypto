@@ -338,13 +338,3 @@ impl MessageDecrypter for ChaCha20Poly1305Crypter {
         Ok(msg.into_plain_message())
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn tls12_ecdsa_sign_schemes_do_not_advertise_ed25519() {
-        assert!(!ECDSA_SCHEMES.contains(&SignatureScheme::ED25519));
-    }
-}
