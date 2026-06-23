@@ -342,7 +342,6 @@ impl MessageDecrypter for ChaCha20Poly1305Crypter {
 
 #[cfg(test)]
 mod test {
-    use rustls::crypto::cipher::Tls12AeadAlgorithm;
     use rustls::SupportedCipherSuite;
 
     use super::{TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384, TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384};
