@@ -5,7 +5,8 @@
 
 use pkcs1::der::Decode as _;
 use pkcs1::RsaPrivateKey;
-use pkcs8::PrivateKeyInfo;
+use pkcs8::der::Decode as _;
+use pkcs8::PrivateKeyInfoRef;
 use rustls::pki_types::PrivateKeyDer;
 use rustls::{Error, SignatureAlgorithm, SignatureScheme};
 use std::sync::Arc;
@@ -57,9 +58,13 @@ impl RsaSigningKey {
                     .map_err(|e| Error::General(format!("Failed to parse PKCS1 key: {e}")))
             }
             PrivateKeyDer::Pkcs8(private_pkcs8_key_der) => {
-                PrivateKeyInfo::from_der(private_pkcs8_key_der.secret_pkcs8_der())
-                    .and_then(|pki| RsaPrivateKey::from_der(pki.private_key))
+                PrivateKeyInfoRef::from_der(private_pkcs8_key_der.secret_pkcs8_der())
                     .map_err(|e| Error::General(format!("Failed to parse PKCS8 key: {e}")))
+                    .and_then(|pki| {
+                        RsaPrivateKey::from_der(pki.private_key.as_bytes()).map_err(|e| {
+                            Error::General(format!("Failed to parse PKCS8 RSA key: {e}"))
+                        })
+                    })
             }
             _ => Err(Error::General("Unsupported key format".to_string())),
         }?;
