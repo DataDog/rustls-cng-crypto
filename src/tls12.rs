@@ -20,9 +20,17 @@ use rustls::{
 
 const GCM_EXPLICIT_NONCE_LENGTH: usize = 8;
 const GCM_IMPLICIT_NONCE_LENGTH: usize = 4;
+const MAX_TLS12_PLAINTEXT_FRAGMENT_LEN: usize = 16_384;
+
+fn reject_oversized_tls12_plaintext(plaintext_len: usize) -> Result<(), Error> {
+    if plaintext_len > MAX_TLS12_PLAINTEXT_FRAGMENT_LEN {
+        return Err(Error::PeerSentOversizedRecord);
+    }
+
+    Ok(())
+}
 
 static ECDSA_SCHEMES: &[SignatureScheme] = &[
-    SignatureScheme::ED25519,
     SignatureScheme::ECDSA_NISTP521_SHA512,
     SignatureScheme::ECDSA_NISTP384_SHA384,
     SignatureScheme::ECDSA_NISTP256_SHA256,
@@ -282,6 +290,7 @@ impl MessageDecrypter for AesGcmDecrypter {
             &aad,
             &mut payload.as_mut()[GCM_EXPLICIT_NONCE_LENGTH..],
         )?;
+        reject_oversized_tls12_plaintext(plaintext_len)?;
 
         // Remove the explicit nonce from the front of the buffer, as it's not part of the plaintext.
         payload.copy_within(
@@ -335,7 +344,34 @@ impl MessageDecrypter for ChaCha20Poly1305Crypter {
         tag.copy_from_slice(&payload[message_len..]);
 
         let plaintext_len = self.key.open(nonce.0, &aad, payload)?;
+        reject_oversized_tls12_plaintext(plaintext_len)?;
         payload.truncate(plaintext_len);
         Ok(msg.into_plain_message())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn tls12_ecdsa_sign_schemes_do_not_advertise_ed25519() {
+        assert!(!ECDSA_SCHEMES.contains(&SignatureScheme::ED25519));
+    }
+
+    #[test]
+    fn aes_gcm_decrypter_rejects_oversized_plaintext() {
+        assert!(matches!(
+            reject_oversized_tls12_plaintext(MAX_TLS12_PLAINTEXT_FRAGMENT_LEN + 1),
+            Err(Error::PeerSentOversizedRecord)
+        ));
+    }
+
+    #[test]
+    fn chacha20_poly1305_decrypter_rejects_oversized_plaintext() {
+        assert!(matches!(
+            reject_oversized_tls12_plaintext(MAX_TLS12_PLAINTEXT_FRAGMENT_LEN + 1),
+            Err(Error::PeerSentOversizedRecord)
+        ));
     }
 }
