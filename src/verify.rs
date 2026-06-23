@@ -39,7 +39,7 @@ pub static SUPPORTED_SIG_ALGS: WebPkiSupportedAlgorithms = WebPkiSupportedAlgori
         // explicit NULL parameters and with parameters absent:
         // https://www.rfc-editor.org/rfc/rfc4055.html#section-2.1
         // rustls-webpki mirrors that with separate RSA PKCS#1 `_ABSENT_PARAMS` algorithms:
-        // https://docs.rs/rustls-webpki/0.103.13/src/rustls_webpki/aws_lc_rs_algs.rs.html#186-245
+        // https://docs.rs/rustls-webpki/0.103.13/src/webpki/aws_lc_rs_algs.rs.html#186-245
         RSA_PKCS1_SHA512,
         RSA_PKCS1_SHA512_ABSENT_PARAMS,
         RSA_PKCS1_SHA384,
@@ -255,7 +255,7 @@ unsafe impl Send for Params {}
 unsafe impl Sync for Params {}
 
 // Match rustls-webpki's RSA verification algorithms, which are defined for 2048-8192-bit keys:
-// https://docs.rs/rustls-webpki/0.103.13/src/rustls_webpki/aws_lc_rs_algs.rs.html#162-182
+// https://docs.rs/rustls-webpki/0.103.13/src/webpki/aws_lc_rs_algs.rs.html#162-182
 const RSA_MIN_MODULUS_BITS: usize = 2048;
 const RSA_MAX_MODULUS_BITS: usize = 8192;
 
