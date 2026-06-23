@@ -6,7 +6,7 @@
 use crate::hash::{SHA256, SHA384, SHA512};
 use crate::keys::{import_ecdsa_private_key, KeyWrapper};
 use pkcs8::der::{asn1::ObjectIdentifier, Decode as _};
-use pkcs8::PrivateKeyInfo;
+use pkcs8::PrivateKeyInfoRef;
 use rustls::crypto::hash::Hash;
 use rustls::pki_types::PrivateKeyDer;
 use rustls::sign::SigningKey;
@@ -54,7 +54,7 @@ impl EcKey {
                 Ok((private_key, scheme))
             }
             PrivateKeyDer::Pkcs8(private_pkcs8_key_der) => {
-                let pki = PrivateKeyInfo::from_der(private_pkcs8_key_der.secret_pkcs8_der())
+                let pki = PrivateKeyInfoRef::from_der(private_pkcs8_key_der.secret_pkcs8_der())
                     .map_err(|e| {
                         Error::General(format!("Failed to parse PKCS#8 private key: {e:?}"))
                     })?;
@@ -79,8 +79,8 @@ impl EcKey {
                             )),
                         }?;
                         // ...but get the private key bytes by parsing the key as sec1
-                        let private_bytes =
-                            EcPrivateKey::from_der(pki.private_key).map_err(|e| {
+                        let private_bytes = EcPrivateKey::from_der(pki.private_key.as_bytes())
+                            .map_err(|e| {
                                 Error::General(format!("Failed to parse ECDSA private key: {e:?}"))
                             })?;
                         Ok((private_bytes.private_key, scheme))
