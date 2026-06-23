@@ -31,10 +31,12 @@ use crate::{KeyProvider, SecureRandom, ALL_CIPHER_SUITES, ALL_KX_GROUPS, SUPPORT
 
 pub(crate) fn enabled() -> bool {
     let mut enabled = 0u8;
-    unsafe {
-        BCryptGetFipsAlgorithmMode(&mut enabled).ok().unwrap();
-    }
-    enabled != 0
+    let query_succeeded = unsafe { BCryptGetFipsAlgorithmMode(&mut enabled).ok().is_ok() };
+    enabled_from_query_result(query_succeeded, enabled)
+}
+
+fn enabled_from_query_result(query_succeeded: bool, enabled: u8) -> bool {
+    query_succeeded && enabled != 0
 }
 
 /// Returns a CNG-based [`CryptoProvider`] using FIPS-approved cipher suites and key exchange groups.
@@ -62,6 +64,13 @@ pub fn provider() -> CryptoProvider {
 mod tests {
 
     use super::*;
+
+    #[test]
+    fn fips_query_result_is_enabled_only_when_query_succeeds_and_windows_reports_enabled() {
+        assert!(enabled_from_query_result(true, 1));
+        assert!(!enabled_from_query_result(true, 0));
+        assert!(!enabled_from_query_result(false, 1));
+    }
 
     #[test]
     fn fips() {
