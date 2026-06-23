@@ -3,9 +3,9 @@
 // This product includes software developed at Datadog (https://www.datadoghq.com/)
 // Copyright 2026 Datadog, Inc.
 
-use pkcs1::der::Decode as _;
+use pkcs1::der::Decode as Pkcs1Decode;
 use pkcs1::RsaPrivateKey;
-use pkcs8::der::Decode as _;
+use pkcs8::der::Decode as Pkcs8Decode;
 use pkcs8::PrivateKeyInfoRef;
 use rustls::pki_types::PrivateKeyDer;
 use rustls::{Error, SignatureAlgorithm, SignatureScheme};
@@ -54,17 +54,15 @@ impl RsaSigningKey {
     pub(super) fn new(der: &PrivateKeyDer<'_>) -> Result<Self, Error> {
         let key = match der {
             PrivateKeyDer::Pkcs1(private_pkcs1_key_der) => {
-                RsaPrivateKey::from_der(private_pkcs1_key_der.secret_pkcs1_der())
+                Pkcs1Decode::from_der(private_pkcs1_key_der.secret_pkcs1_der())
                     .map_err(|e| Error::General(format!("Failed to parse PKCS1 key: {e}")))
             }
             PrivateKeyDer::Pkcs8(private_pkcs8_key_der) => {
-                PrivateKeyInfoRef::from_der(private_pkcs8_key_der.secret_pkcs8_der())
-                    .map_err(|e| Error::General(format!("Failed to parse PKCS8 key: {e}")))
-                    .and_then(|pki| {
-                        RsaPrivateKey::from_der(pki.private_key.as_bytes()).map_err(|e| {
-                            Error::General(format!("Failed to parse PKCS8 RSA key: {e}"))
-                        })
-                    })
+                let pki: PrivateKeyInfoRef =
+                    Pkcs8Decode::from_der(private_pkcs8_key_der.secret_pkcs8_der())
+                        .map_err(|e| Error::General(format!("Failed to parse PKCS8 key: {e}")))?;
+                Pkcs1Decode::from_der(pki.private_key.as_bytes())
+                    .map_err(|e| Error::General(format!("Failed to parse PKCS8 RSA key: {e}")))
             }
             _ => Err(Error::General("Unsupported key format".to_string())),
         }?;
