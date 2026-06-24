@@ -3,7 +3,6 @@
 // This product includes software developed at Datadog (https://www.datadoghq.com/)
 // Copyright 2026 Datadog, Inc.
 
-#[cfg(not(feature = "fips"))]
 use once_cell::sync::Lazy;
 use rustls::crypto::{ActiveKeyExchange, SharedSecret, SupportedKxGroup};
 use rustls::{Error, NamedGroup};
@@ -28,7 +27,6 @@ const MAX_SECRET_SIZE: usize = 48;
 /// * [SECP256R1]
 ///
 pub const ALL_KX_GROUPS: &[&dyn SupportedKxGroup] = &[X25519, SECP256R1, SECP384R1];
-#[cfg(not(feature = "fips"))]
 static DEFAULT_KX_GROUPS: Lazy<Vec<&'static dyn SupportedKxGroup>> = Lazy::new(|| {
     ALL_KX_GROUPS
         .iter()
@@ -77,12 +75,10 @@ impl KxGroup {
     }
 }
 
-#[cfg(not(feature = "fips"))]
 fn usable_kx_group(kx_group: &dyn SupportedKxGroup) -> bool {
     kx_group.name() != NamedGroup::X25519 || cng_supports_x25519()
 }
 
-#[cfg(not(feature = "fips"))]
 fn cng_supports_x25519() -> bool {
     // Windows CNG's Curve25519 public-key import behavior differs by OS version. Windows Server
     // 2022 accepts the X25519 Wycheproof `u = 4` vector, but Windows Server 2025 rejects it with
@@ -116,7 +112,6 @@ pub const SECP256R1: &dyn SupportedKxGroup = &KxGroup::SECP256R1;
 pub const SECP384R1: &dyn SupportedKxGroup = &KxGroup::SECP384R1;
 
 /// Returns key exchange groups usable by the host CNG implementation.
-#[cfg(not(feature = "fips"))]
 pub fn default_kx_groups() -> Vec<&'static dyn SupportedKxGroup> {
     DEFAULT_KX_GROUPS.clone()
 }
@@ -287,7 +282,6 @@ mod test {
 
     use crate::{keys::import_ecdh_private_key, kx::EcKeyExchange};
 
-    #[cfg(not(feature = "fips"))]
     #[test]
     fn default_kx_groups_match_cng_x25519_support() {
         let advertises_x25519 = super::default_kx_groups()
@@ -331,7 +325,6 @@ mod test {
         }
     }
 
-    #[cfg(not(feature = "fips"))]
     #[test]
     fn x25519() {
         if !super::cng_supports_x25519() {

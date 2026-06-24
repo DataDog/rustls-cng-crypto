@@ -6,7 +6,7 @@
 use rustls::crypto::CryptoProvider;
 use windows::Win32::Security::Cryptography::BCryptGetFipsAlgorithmMode;
 
-use crate::{KeyProvider, SecureRandom, ALL_CIPHER_SUITES, ALL_KX_GROUPS, SUPPORTED_SIG_ALGS};
+use crate::{kx, KeyProvider, SecureRandom, ALL_CIPHER_SUITES, SUPPORTED_SIG_ALGS};
 
 pub(crate) fn enabled() -> bool {
     let mut enabled = 0u8;
@@ -41,10 +41,9 @@ pub fn provider() -> CryptoProvider {
             .filter(|cs| cs.fips())
             .cloned()
             .collect(),
-        kx_groups: ALL_KX_GROUPS
-            .iter()
+        kx_groups: kx::default_kx_groups()
+            .into_iter()
             .filter(|kx| kx.fips())
-            .cloned()
             .collect(),
         signature_verification_algorithms: SUPPORTED_SIG_ALGS,
         secure_random: &SecureRandom,

@@ -21,12 +21,6 @@ Full test coverage requires Windows because the provider calls Windows CNG APIs:
 cargo test
 ```
 
-The default test suite is hermetic. The crates.io interoperability test is ignored by default because it requires live network access; run it explicitly when needed:
-
-```bash
-cargo test test_to_internet -- --ignored
-```
-
 This crate only builds for Windows targets. From non-Windows hosts, run check and documentation workflows with an explicit Windows target:
 
 ```bash
