@@ -35,9 +35,17 @@ pub static SUPPORTED_SIG_ALGS: WebPkiSupportedAlgorithms = WebPkiSupportedAlgori
         RSA_PSS_SHA512,
         RSA_PSS_SHA384,
         RSA_PSS_SHA256,
+        // RFC 4055 section 2.1 requires accepting hash AlgorithmIdentifiers both with
+        // explicit NULL parameters and with parameters absent:
+        // https://www.rfc-editor.org/rfc/rfc4055.html#section-2.1
+        // rustls-webpki mirrors that with separate RSA PKCS#1 `_ABSENT_PARAMS` algorithms:
+        // https://docs.rs/rustls-webpki/0.103.13/src/webpki/aws_lc_rs_algs.rs.html#186-245
         RSA_PKCS1_SHA512,
+        RSA_PKCS1_SHA512_ABSENT_PARAMS,
         RSA_PKCS1_SHA384,
+        RSA_PKCS1_SHA384_ABSENT_PARAMS,
         RSA_PKCS1_SHA256,
+        RSA_PKCS1_SHA256_ABSENT_PARAMS,
     ],
     mapping: &[
         //Note: for TLS1.2 the curve is not fixed by SignatureScheme. For TLS1.3 it is.
@@ -69,6 +77,18 @@ pub(crate) static RSA_PKCS1_SHA256: &dyn SignatureVerificationAlgorithm = &Verif
     params: Params::Rsa(RsaPadding::PKCS1),
 };
 
+/// RSA PKCS#1 1.5 signatures using SHA-256 with absent AlgorithmIdentifier parameters.
+pub(crate) static RSA_PKCS1_SHA256_ABSENT_PARAMS: &dyn SignatureVerificationAlgorithm =
+    &VerificationAlgorithm {
+        display_name: "RSA_PKCS1_SHA256_ABSENT_PARAMS",
+        public_key_alg_id: alg_id::RSA_ENCRYPTION,
+        signature_alg_id: AlgorithmIdentifier::from_slice(&[
+            0x30, 0x0b, 0x06, 0x09, 0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x01, 0x0b,
+        ]),
+        hash: SHA256,
+        params: Params::Rsa(RsaPadding::PKCS1),
+    };
+
 /// RSA PKCS#1 1.5 signatures using SHA-384.
 pub(crate) static RSA_PKCS1_SHA384: &dyn SignatureVerificationAlgorithm = &VerificationAlgorithm {
     display_name: "RSA_PKCS1_SHA384",
@@ -78,6 +98,18 @@ pub(crate) static RSA_PKCS1_SHA384: &dyn SignatureVerificationAlgorithm = &Verif
     params: Params::Rsa(RsaPadding::PKCS1),
 };
 
+/// RSA PKCS#1 1.5 signatures using SHA-384 with absent AlgorithmIdentifier parameters.
+pub(crate) static RSA_PKCS1_SHA384_ABSENT_PARAMS: &dyn SignatureVerificationAlgorithm =
+    &VerificationAlgorithm {
+        display_name: "RSA_PKCS1_SHA384_ABSENT_PARAMS",
+        public_key_alg_id: alg_id::RSA_ENCRYPTION,
+        signature_alg_id: AlgorithmIdentifier::from_slice(&[
+            0x30, 0x0b, 0x06, 0x09, 0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x01, 0x0c,
+        ]),
+        hash: SHA384,
+        params: Params::Rsa(RsaPadding::PKCS1),
+    };
+
 /// RSA PKCS#1 1.5 signatures using SHA-512.
 pub(crate) static RSA_PKCS1_SHA512: &dyn SignatureVerificationAlgorithm = &VerificationAlgorithm {
     display_name: "RSA_PKCS1_SHA512",
@@ -86,6 +118,18 @@ pub(crate) static RSA_PKCS1_SHA512: &dyn SignatureVerificationAlgorithm = &Verif
     hash: SHA512,
     params: Params::Rsa(RsaPadding::PKCS1),
 };
+
+/// RSA PKCS#1 1.5 signatures using SHA-512 with absent AlgorithmIdentifier parameters.
+pub(crate) static RSA_PKCS1_SHA512_ABSENT_PARAMS: &dyn SignatureVerificationAlgorithm =
+    &VerificationAlgorithm {
+        display_name: "RSA_PKCS1_SHA512_ABSENT_PARAMS",
+        public_key_alg_id: alg_id::RSA_ENCRYPTION,
+        signature_alg_id: AlgorithmIdentifier::from_slice(&[
+            0x30, 0x0b, 0x06, 0x09, 0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x01, 0x0d,
+        ]),
+        hash: SHA512,
+        params: Params::Rsa(RsaPadding::PKCS1),
+    };
 
 /// RSA PSS signatures using SHA-256.
 pub(crate) static RSA_PSS_SHA256: &dyn SignatureVerificationAlgorithm = &VerificationAlgorithm {
@@ -210,6 +254,26 @@ enum Params {
 unsafe impl Send for Params {}
 unsafe impl Sync for Params {}
 
+// Match rustls-webpki's RSA verification algorithms, which are defined for 2048-8192-bit keys:
+// https://docs.rs/rustls-webpki/0.103.13/src/webpki/aws_lc_rs_algs.rs.html#162-182
+const RSA_MIN_MODULUS_BITS: usize = 2048;
+const RSA_MAX_MODULUS_BITS: usize = 8192;
+
+fn rsa_public_key_allowed_by_webpki(key: &RsaPublicKey<'_>) -> bool {
+    (RSA_MIN_MODULUS_BITS..=RSA_MAX_MODULUS_BITS)
+        .contains(&rsa_modulus_bit_len(key.modulus.as_bytes()))
+}
+
+fn rsa_modulus_bit_len(modulus: &[u8]) -> usize {
+    let Some(first) = modulus.first() else {
+        return 0;
+    };
+
+    let first_byte_bits =
+        usize::try_from(u8::BITS - first.leading_zeros()).expect("u8 bit width fits in usize");
+    (modulus.len() - 1) * 8 + first_byte_bits
+}
+
 #[derive(Debug)]
 enum RsaPadding {
     PKCS1,
@@ -236,6 +300,9 @@ impl<const HASH_SIZE: usize> SignatureVerificationAlgorithm for VerificationAlgo
         match &self.params {
             Params::Rsa(padding) => {
                 let key = RsaPublicKey::try_from(public_key).map_err(|_| InvalidSignature)?;
+                if !rsa_public_key_allowed_by_webpki(&key) {
+                    return Err(InvalidSignature);
+                }
                 let handle = import_rsa_public_key(&key).map_err(|_| InvalidSignature)?;
 
                 match padding {
@@ -339,6 +406,91 @@ impl<const HASH_SIZE: usize> SignatureVerificationAlgorithm for VerificationAlgo
 mod tests {
     use super::*;
     use wycheproof::TestResult;
+
+    const RSA_PKCS1_SHA256_ABSENT_PARAMS_DER: &[u8] = &[
+        0x30, 0x0b, 0x06, 0x09, 0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x01, 0x0b,
+    ];
+    const RSA_PKCS1_SHA384_ABSENT_PARAMS_DER: &[u8] = &[
+        0x30, 0x0b, 0x06, 0x09, 0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x01, 0x0c,
+    ];
+    const RSA_PKCS1_SHA512_ABSENT_PARAMS_DER: &[u8] = &[
+        0x30, 0x0b, 0x06, 0x09, 0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x01, 0x0d,
+    ];
+
+    #[test]
+    fn supported_algorithms_include_rsa_pkcs1_absent_parameter_variants() {
+        for signature_alg_id in [
+            AlgorithmIdentifier::from_slice(RSA_PKCS1_SHA256_ABSENT_PARAMS_DER),
+            AlgorithmIdentifier::from_slice(RSA_PKCS1_SHA384_ABSENT_PARAMS_DER),
+            AlgorithmIdentifier::from_slice(RSA_PKCS1_SHA512_ABSENT_PARAMS_DER),
+        ] {
+            assert!(SUPPORTED_SIG_ALGS
+                .all
+                .iter()
+                .any(|alg| alg.signature_alg_id() == signature_alg_id));
+        }
+    }
+
+    #[test]
+    fn rsa_public_key_policy_matches_webpki_2048_to_8192_bit_bounds() {
+        let key_2047 = rsa_public_key_with_modulus(&modulus_with_bit_len(2047));
+        let key_2048 = rsa_public_key_with_modulus(&modulus_with_bit_len(2048));
+        let key_8192 = rsa_public_key_with_modulus(&modulus_with_bit_len(8192));
+        let key_8193 = rsa_public_key_with_modulus(&modulus_with_bit_len(8193));
+
+        assert!(!rsa_public_key_allowed_by_webpki(&key_2047));
+        assert!(rsa_public_key_allowed_by_webpki(&key_2048));
+        assert!(rsa_public_key_allowed_by_webpki(&key_8192));
+        assert!(!rsa_public_key_allowed_by_webpki(&key_8193));
+    }
+
+    fn rsa_public_key_with_modulus(modulus: &[u8]) -> RsaPublicKey<'static> {
+        let mut der = Vec::new();
+        append_der_integer(&mut der, modulus);
+        append_der_integer(&mut der, &[0x01, 0x00, 0x01]);
+
+        let mut sequence = Vec::new();
+        sequence.push(0x30);
+        append_der_len(&mut sequence, der.len());
+        sequence.extend_from_slice(&der);
+
+        let sequence: &'static [u8] = Box::leak(sequence.into_boxed_slice());
+        RsaPublicKey::try_from(sequence).unwrap()
+    }
+
+    fn modulus_with_bit_len(bit_len: usize) -> Vec<u8> {
+        let len = bit_len.div_ceil(8);
+        let mut modulus = vec![0xff; len];
+        modulus[0] = 1 << ((bit_len - 1) % 8);
+        modulus
+    }
+
+    fn append_der_integer(der: &mut Vec<u8>, value: &[u8]) {
+        der.push(0x02);
+        let needs_leading_zero = value.first().is_some_and(|byte| byte & 0x80 != 0);
+        append_der_len(der, value.len() + usize::from(needs_leading_zero));
+        if needs_leading_zero {
+            der.push(0);
+        }
+        der.extend_from_slice(value);
+    }
+
+    fn append_der_len(der: &mut Vec<u8>, len: usize) {
+        if len < 128 {
+            der.push(u8::try_from(len).expect("short-form DER length fits in u8"));
+            return;
+        }
+
+        let len_bytes = len.to_be_bytes();
+        let first = len_bytes
+            .iter()
+            .position(|byte| *byte != 0)
+            .unwrap_or(len_bytes.len() - 1);
+        let len_len =
+            u8::try_from(len_bytes.len() - first).expect("usize DER length-of-length fits in u8");
+        der.push(0x80 | len_len);
+        der.extend_from_slice(&len_bytes[first..]);
+    }
 
     #[test]
     fn test_open_ssl_algorithm_debug() {

@@ -22,7 +22,6 @@ const GCM_EXPLICIT_NONCE_LENGTH: usize = 8;
 const GCM_IMPLICIT_NONCE_LENGTH: usize = 4;
 
 static ECDSA_SCHEMES: &[SignatureScheme] = &[
-    SignatureScheme::ED25519,
     SignatureScheme::ECDSA_NISTP521_SHA512,
     SignatureScheme::ECDSA_NISTP384_SHA384,
     SignatureScheme::ECDSA_NISTP256_SHA256,
