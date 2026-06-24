@@ -39,20 +39,21 @@ pub(crate) fn ecdh_x25519() -> Result<BCRYPT_ALG_HANDLE, Error> {
 }
 
 #[cfg(feature = "tls12")]
-pub(crate) fn tls12_kdf() -> BCRYPT_ALG_HANDLE {
-    static ALG_HANDLE: OnceCell<Handle> = OnceCell::new();
+pub(crate) fn tls12_kdf() -> Result<BCRYPT_ALG_HANDLE, Error> {
+    static ALG_HANDLE: OnceCell<Option<Handle>> = OnceCell::new();
     ALG_HANDLE
         .get_or_init(|| {
-            Handle(
-                load_algorithm(
-                    BCRYPT_TLS1_2_KDF_ALGORITHM,
-                    BCRYPT_OPEN_ALGORITHM_PROVIDER_FLAGS::default(),
-                    None,
-                )
-                .unwrap(),
+            load_algorithm(
+                BCRYPT_TLS1_2_KDF_ALGORITHM,
+                BCRYPT_OPEN_ALGORITHM_PROVIDER_FLAGS::default(),
+                None,
             )
+            .ok()
+            .map(Handle)
         })
-        .0
+        .as_ref()
+        .map(|handle| handle.0)
+        .ok_or_else(|| Error::General("CNG TLS 1.2 KDF algorithm provider unavailable".into()))
 }
 
 /// Load an algorithm provider with specified flags, and optional property.

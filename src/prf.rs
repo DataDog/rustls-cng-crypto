@@ -16,42 +16,42 @@ use windows::{
 
 pub(crate) struct Prf<const HASH_SIZE: usize>(pub(crate) Algorithm<HASH_SIZE>);
 
-impl<const HASH_SIZE: usize> rustls::crypto::tls12::Prf for Prf<HASH_SIZE> {
-    fn for_key_exchange(
+fn u32_len(len: usize, name: &str) -> Result<u32, rustls::Error> {
+    u32::try_from(len).map_err(|_| rustls::Error::General(format!("{name} is too large for CNG")))
+}
+
+impl<const HASH_SIZE: usize> Prf<HASH_SIZE> {
+    fn try_for_secret(
         &self,
-        output: &mut [u8; 48],
-        kx: Box<dyn ActiveKeyExchange>,
-        peer_pub_key: &[u8],
+        output: &mut [u8],
+        secret: &[u8],
         label: &[u8],
         seed: &[u8],
     ) -> Result<(), rustls::Error> {
-        let secret = kx.complete(peer_pub_key)?;
-        self.for_secret(output, secret.secret_bytes(), label, seed);
-        Ok(())
-    }
-
-    fn for_secret(&self, output: &mut [u8], secret: &[u8], label: &[u8], seed: &[u8]) {
         let mut key = Owned::default();
+        let tls12_kdf = tls12_kdf()?;
 
         unsafe {
-            BCryptGenerateSymmetricKey(tls12_kdf(), &mut *key, None, secret, 0)
+            BCryptGenerateSymmetricKey(tls12_kdf, &mut *key, None, secret, 0)
                 .ok()
-                .unwrap();
+                .map_err(|e| {
+                    rustls::Error::General(format!("TLS 1.2 PRF key import failed: {e}"))
+                })?;
         }
 
         let buffers = [
             BCryptBuffer {
-                cbBuffer: label.len() as u32,
+                cbBuffer: u32_len(label.len(), "TLS 1.2 PRF label")?,
                 BufferType: KDF_TLS_PRF_LABEL,
                 pvBuffer: label.as_ptr() as *mut _,
             },
             BCryptBuffer {
-                cbBuffer: seed.len() as u32,
+                cbBuffer: u32_len(seed.len(), "TLS 1.2 PRF seed")?,
                 BufferType: KDF_TLS_PRF_SEED,
                 pvBuffer: seed.as_ptr() as *mut _,
             },
             BCryptBuffer {
-                cbBuffer: self.0.id_bytes.len() as u32,
+                cbBuffer: u32_len(self.0.id_bytes.len(), "TLS 1.2 PRF hash algorithm id")?,
                 BufferType: KDF_HASH_ALGORITHM,
                 pvBuffer: self.0.id_bytes.as_ptr() as *mut _,
             },
@@ -67,8 +67,31 @@ impl<const HASH_SIZE: usize> rustls::crypto::tls12::Prf for Prf<HASH_SIZE> {
         unsafe {
             BCryptKeyDerivation(*key, Some(&params), output, &mut size, 0)
                 .ok()
-                .unwrap();
+                .map_err(|e| {
+                    rustls::Error::General(format!("TLS 1.2 PRF derivation failed: {e}"))
+                })?;
         };
+
+        Ok(())
+    }
+}
+
+impl<const HASH_SIZE: usize> rustls::crypto::tls12::Prf for Prf<HASH_SIZE> {
+    fn for_key_exchange(
+        &self,
+        output: &mut [u8; 48],
+        kx: Box<dyn ActiveKeyExchange>,
+        peer_pub_key: &[u8],
+        label: &[u8],
+        seed: &[u8],
+    ) -> Result<(), rustls::Error> {
+        let secret = kx.complete(peer_pub_key)?;
+        self.try_for_secret(output, secret.secret_bytes(), label, seed)
+    }
+
+    fn for_secret(&self, output: &mut [u8], secret: &[u8], label: &[u8], seed: &[u8]) {
+        self.try_for_secret(output, secret, label, seed)
+            .expect("rustls only calls TLS 1.2 PRF for advertised CNG-backed cipher suites")
     }
 
     fn fips(&self) -> bool {
@@ -83,7 +106,13 @@ mod test {
 
     use super::super::hash::{SHA256, SHA384};
 
-    use super::Prf;
+    use super::{u32_len, Prf};
+
+    #[test]
+    fn cng_buffer_lengths_fit_in_u32() {
+        assert_eq!(u32_len(42, "test").unwrap(), 42);
+        assert!(u32_len(usize::MAX, "test").is_err());
+    }
 
     #[test]
     fn test_sha256() {
