@@ -20,6 +20,7 @@ use rustls::{
 
 const GCM_EXPLICIT_NONCE_LENGTH: usize = 8;
 const GCM_IMPLICIT_NONCE_LENGTH: usize = 4;
+const MAX_FRAGMENT_LEN: usize = 16 * 1024;
 
 static ECDSA_SCHEMES: &[SignatureScheme] = &[
     SignatureScheme::ECDSA_NISTP521_SHA512,
@@ -281,6 +282,9 @@ impl MessageDecrypter for AesGcmDecrypter {
             &aad,
             &mut payload.as_mut()[GCM_EXPLICIT_NONCE_LENGTH..],
         )?;
+        if plaintext_len > MAX_FRAGMENT_LEN {
+            return Err(Error::PeerSentOversizedRecord);
+        }
 
         // Remove the explicit nonce from the front of the buffer, as it's not part of the plaintext.
         payload.copy_within(
@@ -334,6 +338,9 @@ impl MessageDecrypter for ChaCha20Poly1305Crypter {
         tag.copy_from_slice(&payload[message_len..]);
 
         let plaintext_len = self.key.open(nonce.0, &aad, payload)?;
+        if plaintext_len > MAX_FRAGMENT_LEN {
+            return Err(Error::PeerSentOversizedRecord);
+        }
         payload.truncate(plaintext_len);
         Ok(msg.into_plain_message())
     }
@@ -341,9 +348,13 @@ impl MessageDecrypter for ChaCha20Poly1305Crypter {
 
 #[cfg(test)]
 mod test {
-    use rustls::SupportedCipherSuite;
+    use rustls::crypto::cipher::{InboundOpaqueMessage, OutboundChunks, OutboundPlainMessage};
+    use rustls::{ContentType, Error, ProtocolVersion, SupportedCipherSuite};
 
-    use super::{TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384, TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384};
+    use super::{
+        TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384, TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+        TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
+    };
 
     #[test]
     fn tls12_aes256_gcm_suites_use_32_byte_keys() {
@@ -359,6 +370,47 @@ mod test {
                 suite.aead_alg.key_block_shape().enc_key_len,
                 32,
                 "{:?} should derive 32-byte AES-256-GCM keys",
+                suite.common.suite
+            );
+        }
+    }
+
+    #[test]
+    fn tls12_aead_decrypt_rejects_oversized_plaintext() {
+        for suite in [
+            TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+            TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
+        ] {
+            let SupportedCipherSuite::Tls12(suite) = suite else {
+                panic!("expected a TLS 1.2 cipher suite");
+            };
+
+            let shape = suite.aead_alg.key_block_shape();
+            let key_bytes = [0x42; 32];
+            let iv = vec![0x5a; shape.fixed_iv_len];
+            let explicit = vec![0xa5; shape.explicit_nonce_len];
+            let plaintext = vec![0x3c; MAX_FRAGMENT_LEN + 1];
+            let seq = 0;
+
+            let mut encrypter = suite.aead_alg.encrypter(key_bytes.into(), &iv, &explicit);
+            let plain_message = OutboundPlainMessage {
+                typ: ContentType::ApplicationData,
+                version: ProtocolVersion::TLSv1_2,
+                payload: OutboundChunks::from(plaintext.as_slice()),
+            };
+            let mut ciphertext = encrypter.encrypt(plain_message, seq).unwrap();
+
+            let mut decrypter = suite.aead_alg.decrypter(key_bytes.into(), &iv);
+            let opaque_message = InboundOpaqueMessage::new(
+                ciphertext.typ,
+                ciphertext.version,
+                ciphertext.payload.as_mut(),
+            );
+            let err = decrypter.decrypt(opaque_message, seq).unwrap_err();
+            assert_eq!(
+                err,
+                Error::PeerSentOversizedRecord,
+                "{:?} should reject plaintext longer than the TLS record limit",
                 suite.common.suite
             );
         }
