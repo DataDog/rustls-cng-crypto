@@ -258,20 +258,33 @@ unsafe impl Sync for Params {}
 // https://docs.rs/rustls-webpki/0.103.13/src/webpki/aws_lc_rs_algs.rs.html#162-182
 const RSA_MIN_MODULUS_BITS: usize = 2048;
 const RSA_MAX_MODULUS_BITS: usize = 8192;
+// ring/aws-lc-rs accept small odd public exponents for verification: 2-33 bits,
+// which is equivalent to e >= 3 and e <= 2^33 - 1 for positive integers.
+const RSA_MIN_PUBLIC_EXPONENT_BITS: usize = 2;
+const RSA_MAX_PUBLIC_EXPONENT_BITS: usize = 33;
 
 fn rsa_public_key_allowed_by_webpki(key: &RsaPublicKey<'_>) -> bool {
     (RSA_MIN_MODULUS_BITS..=RSA_MAX_MODULUS_BITS)
-        .contains(&rsa_modulus_bit_len(key.modulus.as_bytes()))
+        .contains(&rsa_big_endian_bit_len(key.modulus.as_bytes()))
+        && rsa_public_exponent_allowed_by_webpki(key.public_exponent.as_bytes())
 }
 
-fn rsa_modulus_bit_len(modulus: &[u8]) -> usize {
-    let Some(first) = modulus.first() else {
+fn rsa_public_exponent_allowed_by_webpki(exponent: &[u8]) -> bool {
+    (RSA_MIN_PUBLIC_EXPONENT_BITS..=RSA_MAX_PUBLIC_EXPONENT_BITS)
+        .contains(&rsa_big_endian_bit_len(exponent))
+        && exponent.last().is_some_and(|byte| byte & 1 == 1)
+}
+
+fn rsa_big_endian_bit_len(bytes: &[u8]) -> usize {
+    let Some((first_nonzero_index, first_nonzero)) =
+        bytes.iter().enumerate().find(|(_, byte)| **byte != 0)
+    else {
         return 0;
     };
 
-    let first_byte_bits =
-        usize::try_from(u8::BITS - first.leading_zeros()).expect("u8 bit width fits in usize");
-    (modulus.len() - 1) * 8 + first_byte_bits
+    let first_byte_bits = usize::try_from(u8::BITS - first_nonzero.leading_zeros())
+        .expect("u8 bit width fits in usize");
+    (bytes.len() - first_nonzero_index - 1) * 8 + first_byte_bits
 }
 
 #[derive(Debug)]
@@ -444,10 +457,37 @@ mod tests {
         assert!(!rsa_public_key_allowed_by_webpki(&key_8193));
     }
 
+    #[test]
+    fn rsa_public_key_policy_matches_webpki_public_exponent_bounds() {
+        let minimum_exponent = rsa_public_key_with_exponent(&[0x03]);
+        let valid_exponent_65537 = rsa_public_key_with_exponent(&[0x01, 0x00, 0x01]);
+        let maximum_exponent = rsa_public_key_with_exponent(&[0x01, 0xff, 0xff, 0xff, 0xff]);
+        let exponent_1 = rsa_public_key_with_exponent(&[0x01]);
+        let exponent_2 = rsa_public_key_with_exponent(&[0x02]);
+        let even_exponent = rsa_public_key_with_exponent(&[0x01, 0x00, 0x00]);
+        let oversized_exponent = rsa_public_key_with_exponent(&[0x02, 0x00, 0x00, 0x00, 0x01]);
+
+        assert!(rsa_public_key_allowed_by_webpki(&minimum_exponent));
+        assert!(rsa_public_key_allowed_by_webpki(&valid_exponent_65537));
+        assert!(rsa_public_key_allowed_by_webpki(&maximum_exponent));
+        assert!(!rsa_public_key_allowed_by_webpki(&exponent_1));
+        assert!(!rsa_public_key_allowed_by_webpki(&exponent_2));
+        assert!(!rsa_public_key_allowed_by_webpki(&even_exponent));
+        assert!(!rsa_public_key_allowed_by_webpki(&oversized_exponent));
+    }
+
     fn rsa_public_key_with_modulus(modulus: &[u8]) -> RsaPublicKey<'static> {
+        rsa_public_key_with_components(modulus, &[0x01, 0x00, 0x01])
+    }
+
+    fn rsa_public_key_with_exponent(exponent: &[u8]) -> RsaPublicKey<'static> {
+        rsa_public_key_with_components(&modulus_with_bit_len(2048), exponent)
+    }
+
+    fn rsa_public_key_with_components(modulus: &[u8], exponent: &[u8]) -> RsaPublicKey<'static> {
         let mut der = Vec::new();
         append_der_integer(&mut der, modulus);
-        append_der_integer(&mut der, &[0x01, 0x00, 0x01]);
+        append_der_integer(&mut der, exponent);
 
         let mut sequence = Vec::new();
         sequence.push(0x30);
