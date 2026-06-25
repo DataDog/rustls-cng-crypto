@@ -172,15 +172,9 @@ fn p1363_to_der(data: &[u8]) -> Vec<u8> {
     const SEQUENCE_TAG: u8 = 0x30;
     const INTEGER_TAG: u8 = 0x02;
 
-    let (mut r, mut s) = data.split_at(data.len() / 2);
-
-    while r[0] == 0x0 {
-        r = &r[1..];
-    }
-
-    while s[0] == 0x0 {
-        s = &s[1..];
-    }
+    let (r, s) = data.split_at(data.len() / 2);
+    let r = trim_leading_zeroes(r);
+    let s = trim_leading_zeroes(s);
 
     // Do we need to pad the r and s parts?
     let r_sign: &[u8] = if r[0] >= 0x80 { &[0] } else { &[] };
@@ -191,7 +185,7 @@ fn p1363_to_der(data: &[u8]) -> Vec<u8> {
     let v_length = 4 + r_sign.len() + s_sign.len() + r.len() + s.len();
 
     // Do we use short or long form for the length?
-    let (short_form, length_len) = if v_length <= 0x80 {
+    let (short_form, length_len) = if v_length < 0x80 {
         // Short form, one octet
         (true, 1)
     } else {
@@ -228,4 +222,40 @@ fn p1363_to_der(data: &[u8]) -> Vec<u8> {
     der.extend(s_sign);
     der.extend(s);
     der
+}
+
+fn trim_leading_zeroes(component: &[u8]) -> &[u8] {
+    match component.iter().position(|&byte| byte != 0) {
+        Some(first_nonzero) => &component[first_nonzero..],
+        None => &[0],
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::p1363_to_der;
+
+    #[test]
+    fn p1363_to_der_uses_long_form_sequence_length_at_128() {
+        let mut signature = vec![0x01; 124];
+        signature[62] = 0x02;
+
+        let der = p1363_to_der(&signature);
+
+        assert_eq!(&der[..3], &[0x30, 0x81, 0x80]);
+        assert_eq!(der.len(), 131);
+        assert_eq!(der[3], 0x02);
+        assert_eq!(der[4], 62);
+        assert_eq!(der[67], 0x02);
+        assert_eq!(der[68], 62);
+    }
+
+    #[test]
+    fn p1363_to_der_encodes_all_zero_components_as_zero_integers() {
+        let signature = vec![0x00; 64];
+
+        let der = p1363_to_der(&signature);
+
+        assert_eq!(der, vec![0x30, 0x06, 0x02, 0x01, 0x00, 0x02, 0x01, 0x00]);
+    }
 }
