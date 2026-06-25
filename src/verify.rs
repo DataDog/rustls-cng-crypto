@@ -459,6 +459,7 @@ mod tests {
 
     #[test]
     fn rsa_public_key_policy_matches_webpki_public_exponent_bounds() {
+        let minimum_exponent = rsa_public_key_with_exponent(&[0x03]);
         let valid_exponent_65537 = rsa_public_key_with_exponent(&[0x01, 0x00, 0x01]);
         let maximum_exponent = rsa_public_key_with_exponent(&[0x01, 0xff, 0xff, 0xff, 0xff]);
         let exponent_1 = rsa_public_key_with_exponent(&[0x01]);
@@ -466,6 +467,7 @@ mod tests {
         let even_exponent = rsa_public_key_with_exponent(&[0x01, 0x00, 0x00]);
         let oversized_exponent = rsa_public_key_with_exponent(&[0x02, 0x00, 0x00, 0x00, 0x01]);
 
+        assert!(rsa_public_key_allowed_by_webpki(&minimum_exponent));
         assert!(rsa_public_key_allowed_by_webpki(&valid_exponent_65537));
         assert!(rsa_public_key_allowed_by_webpki(&maximum_exponent));
         assert!(!rsa_public_key_allowed_by_webpki(&exponent_1));
