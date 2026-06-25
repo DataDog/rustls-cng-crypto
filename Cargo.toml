@@ -5,14 +5,19 @@
 
 [package]
 name = "rustls-cng-crypto"
-authors = ["Tom Fay <tom@teamfay.co.uk>"]
-version = "0.1.2"
+version = "0.2.0"
 edition = "2021"
 license = "MIT"
 description = "Rustls crypto provider for CNG"
 homepage = "https://github.com/DataDog/rustls-cng-crypto"
 repository = "https://github.com/DataDog/rustls-cng-crypto"
 readme = "README.md"
+exclude = [
+    ".github/",
+    "Makefile",
+    "deny.toml",
+    "license-tool.toml",
+]
 
 [dependencies]
 once_cell = "1.8.0"

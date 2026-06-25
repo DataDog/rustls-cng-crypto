@@ -6,9 +6,7 @@ This repository is a Datadog-maintained fork of [`tofay/rustls-cng-crypto`](http
 
 See the [documentation](https://docs.rs/rustls-cng-crypto) for supported cipher suites and algorithms, along with instructions for running in FIPS mode.
 
-[![crates.io](https://img.shields.io/crates/v/rustls-cng-crypto?style=flat-square&logo=rust)](https://crates.io/crates/rustls-cng-crypto)
 [![Build Status](https://github.com/DataDog/rustls-cng-crypto/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/DataDog/rustls-cng-crypto/actions/workflows/ci.yml?query=branch%3Amain)
-[![Documentation](https://docs.rs/rustls-cng-crypto/badge.svg)](https://docs.rs/rustls-cng-crypto/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 ## Testing
