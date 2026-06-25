@@ -53,7 +53,31 @@
 //!
 //! # Features
 //! - `tls12`: Enables TLS 1.2 cipher suites. Enabled by default.
-//! - `fips`: Changes the default provider to use FIPS-approved cipher suites and key exchange groups. See [fips].
+//! - `fips`: Changes the default provider to use FIPS-approved cipher suites and key exchange groups.
+//!   See [`fips_provider()`] and [FIPS support](#fips-support).
+//!
+//! ## FIPS support
+//!
+//! To use rustls with this crate in FIPS mode:
+//!
+//! 1. Enable FIPS mode for Windows. See Microsoft's
+//!    [FIPS 140 Validation](https://learn.microsoft.com/en-us/windows/security/security-foundations/certification/fips-140-validation)
+//!    documentation.
+//! 2. Enable this crate's `fips` feature, or explicitly use [`fips_provider()`]. The `fips`
+//!    feature changes [`default_provider()`] to use FIPS-approved cipher suites and key exchange
+//!    groups. If Windows is not running in FIPS mode, the provider will be empty.
+//! 3. Specify `require_ems` when constructing [`rustls::ClientConfig`] or
+//!    [`rustls::ServerConfig`]. See the rustls
+//!    [FIPS manual](https://docs.rs/rustls/latest/rustls/manual/_06_fips/index.html)
+//!    for rationale.
+//! 4. Validate the FIPS status of your `ClientConfig` or `ServerConfig` at runtime. See the rustls
+//!    [FIPS status documentation](https://docs.rs/rustls/latest/rustls/manual/_06_fips/index.html#3-validate-the-fips-status-of-your-clientconfigserverconfig-at-run-time).
+//!
+//! ## Platform support
+//!
+//! This crate uses Windows CNG APIs and only builds for Windows targets. From non-Windows hosts,
+//! run checks and documentation builds with an explicit Windows target such as
+//! `--target x86_64-pc-windows-msvc`.
 #![warn(missing_docs)]
 use rustls::crypto::{CryptoProvider, GetRandomFailed, SupportedKxGroup};
 use rustls::SupportedCipherSuite;
@@ -88,7 +112,9 @@ pub mod cipher_suite {
     pub use super::tls12::{
         TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256, TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
     };
-    pub use super::tls13::{TLS13_AES_128_GCM_SHA256, TLS13_AES_256_GCM_SHA384};
+    pub use super::tls13::{
+        TLS13_AES_128_GCM_SHA256, TLS13_AES_256_GCM_SHA384, TLS13_CHACHA20_POLY1305_SHA256,
+    };
 }
 
 #[cfg(feature = "fips")]

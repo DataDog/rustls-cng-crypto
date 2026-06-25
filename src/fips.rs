@@ -3,31 +3,10 @@
 // This product includes software developed at Datadog (https://www.datadoghq.com/)
 // Copyright 2026 Datadog, Inc.
 
-//! # FIPS support
-//!
-//! To use rustls with this crate in FIPS mode, perform the following actions.
-//!
-//! ## 1. Enable FIPS mode for Windows
-//!
-//! See [Microsoft documentation](https://learn.microsoft.com/en-us/windows/security/security-foundations/certification/fips-140-validation).
-//!
-//! ## 2. Enable the `fips` feature, or explicitly use the [crate::fips_provider()] function
-//!
-//! The fips feature changes the behaviour of [crate::default_provider()] to use FIPS-approved cipher suites and key exchange groups.
-//! Or you can explicitly use the [crate::fips_provider()] function to create a provider with FIPS-approved cipher suites and key exchange groups.
-//! If Windows is not running in FIPS mode, the provider will be empty.
-//!
-//! ## 3. Specify `require_ems` when constructing [rustls::ClientConfig] or [rustls::ServerConfig]
-//!
-//! See [rustls documentation](https://docs.rs/rustls/latest/rustls/client/struct.ClientConfig.html#structfield.require_ems) for rationale.
-//!
-//! ## 4. Validate the FIPS status of your ClientConfig or ServerConfig at runtime
-//! See [rustls documentation on FIPS](https://docs.rs/rustls/latest/rustls/manual/_06_fips/index.html#3-validate-the-fips-status-of-your-clientconfigserverconfig-at-run-time).
-
 use rustls::crypto::CryptoProvider;
 use windows::Win32::Security::Cryptography::BCryptGetFipsAlgorithmMode;
 
-use crate::{KeyProvider, SecureRandom, ALL_CIPHER_SUITES, ALL_KX_GROUPS, SUPPORTED_SIG_ALGS};
+use crate::{kx, KeyProvider, SecureRandom, ALL_CIPHER_SUITES, SUPPORTED_SIG_ALGS};
 
 pub(crate) fn enabled() -> bool {
     let mut enabled = 0u8;
@@ -41,6 +20,21 @@ fn enabled_from_query_result(query_succeeded: bool, enabled: u8) -> bool {
 
 /// Returns a CNG-based [`CryptoProvider`] using FIPS-approved cipher suites and key exchange groups.
 ///
+/// To use rustls with this provider in FIPS mode:
+///
+/// 1. Enable FIPS mode for Windows. See Microsoft's
+///    [FIPS 140 Validation](https://learn.microsoft.com/en-us/windows/security/security-foundations/certification/fips-140-validation)
+///    documentation.
+/// 2. Enable this crate's `fips` feature, or explicitly use [`crate::fips_provider()`]. The `fips`
+///    feature changes [`crate::default_provider()`] to use FIPS-approved cipher suites and key
+///    exchange groups.
+/// 3. Specify `require_ems` when constructing [`rustls::ClientConfig`] or
+///    [`rustls::ServerConfig`]. See the rustls
+///    [FIPS manual](https://docs.rs/rustls/latest/rustls/manual/_06_fips/index.html)
+///    for rationale.
+/// 4. Validate the FIPS status of your `ClientConfig` or `ServerConfig` at runtime. See the rustls
+///    [FIPS status documentation](https://docs.rs/rustls/latest/rustls/manual/_06_fips/index.html#3-validate-the-fips-status-of-your-clientconfigserverconfig-at-run-time).
+///
 /// Usage requires that Windows is running in FIPS mode, otherwise the provider will be empty.
 pub fn provider() -> CryptoProvider {
     CryptoProvider {
@@ -49,10 +43,9 @@ pub fn provider() -> CryptoProvider {
             .filter(|cs| cs.fips())
             .cloned()
             .collect(),
-        kx_groups: ALL_KX_GROUPS
-            .iter()
+        kx_groups: kx::default_kx_groups()
+            .into_iter()
             .filter(|kx| kx.fips())
-            .cloned()
             .collect(),
         signature_verification_algorithms: SUPPORTED_SIG_ALGS,
         secure_random: &SecureRandom,

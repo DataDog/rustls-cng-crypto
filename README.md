@@ -21,6 +21,13 @@ Full test coverage requires Windows because the provider calls Windows CNG APIs:
 cargo test
 ```
 
+This crate only builds for Windows targets. From non-Windows hosts, run check and documentation workflows with an explicit Windows target:
+
+```bash
+cargo check --target x86_64-pc-windows-msvc
+RUSTDOCFLAGS='-D warnings' cargo doc --no-deps --target x86_64-pc-windows-msvc
+```
+
 Run formatting checks before submitting changes:
 
 ```bash
