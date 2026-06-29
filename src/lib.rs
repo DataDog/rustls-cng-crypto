@@ -43,7 +43,7 @@
 //! ```toml
 //! [dependencies]
 //! rustls = { version = "0.23.0", features = ["tls12", "std"], default-features = false }
-//! rustls_cng_crypto = "0.1.0"
+//! rustls_cng_crypto = "0.2.0"
 //! ```
 //!
 //! ### Configuration
