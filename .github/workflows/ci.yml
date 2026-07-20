@@ -108,7 +108,7 @@ jobs:
       - name: Cache build artifacts
         uses: Swatinem/rust-cache@42dc69e1aa15d09112580998cf2ef0119e2e91ae # v2
       - name: Install cargo-llvm-cov
-        uses: taiki-e/install-action@9458fed45835344deb5e69e06e831be047c96abf # cargo-llvm-cov
+        uses: taiki-e/install-action@b98dda19e8b67e904c9e78a0cbd773be4105a74f # cargo-llvm-cov
       - name: Generate coverage
         run: cargo llvm-cov --lcov --output-path lcov.info
       - name: Report to codecov.io
