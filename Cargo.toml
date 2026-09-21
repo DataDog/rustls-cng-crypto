@@ -51,7 +51,7 @@ rustls = { version = "0.23.0", features = [
 rustls-pemfile = "2"
 rustls-webpki = { version = "0.103.0", default-features = false }
 webpki-roots = "1.0"
-wycheproof = { version = "0.6.0", default-features = false, features = [
+wycheproof = { version = "0.7.0", default-features = false, features = [
     "aead",
     "ecdsa",
     "ecdh",
