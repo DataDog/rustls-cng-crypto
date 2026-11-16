@@ -4,7 +4,7 @@
 // Copyright 2026 Datadog, Inc.
 
 use core::fmt;
-use pkcs1::RsaPublicKey;
+use pkcs1::RsaPublicKeyRef;
 use rustls::{
     crypto::{hash::Hash as _, WebPkiSupportedAlgorithms},
     pki_types::{alg_id, AlgorithmIdentifier, InvalidSignature, SignatureVerificationAlgorithm},
@@ -263,7 +263,7 @@ const RSA_MAX_MODULUS_BITS: usize = 8192;
 const RSA_MIN_PUBLIC_EXPONENT_BITS: usize = 2;
 const RSA_MAX_PUBLIC_EXPONENT_BITS: usize = 33;
 
-fn rsa_public_key_allowed_by_webpki(key: &RsaPublicKey<'_>) -> bool {
+fn rsa_public_key_allowed_by_webpki(key: &RsaPublicKeyRef<'_>) -> bool {
     (RSA_MIN_MODULUS_BITS..=RSA_MAX_MODULUS_BITS)
         .contains(&rsa_big_endian_bit_len(key.modulus.as_bytes()))
         && rsa_public_exponent_allowed_by_webpki(key.public_exponent.as_bytes())
@@ -312,7 +312,7 @@ impl<const HASH_SIZE: usize> SignatureVerificationAlgorithm for VerificationAlgo
 
         match &self.params {
             Params::Rsa(padding) => {
-                let key = RsaPublicKey::try_from(public_key).map_err(|_| InvalidSignature)?;
+                let key = RsaPublicKeyRef::try_from(public_key).map_err(|_| InvalidSignature)?;
                 if !rsa_public_key_allowed_by_webpki(&key) {
                     return Err(InvalidSignature);
                 }
@@ -371,7 +371,7 @@ impl<const HASH_SIZE: usize> SignatureVerificationAlgorithm for VerificationAlgo
                 // convert asn1 signature to raw signature, using the fact that RsaPublicKey ASN.1 is
                 // identical to the signature we are verifying
                 let parsed_signature =
-                    RsaPublicKey::try_from(signature).map_err(|_| InvalidSignature)?;
+                    RsaPublicKeyRef::try_from(signature).map_err(|_| InvalidSignature)?;
                 let r = parsed_signature.modulus.as_bytes();
                 let s = parsed_signature.public_exponent.as_bytes();
                 let bit_size = unsafe {
@@ -476,15 +476,15 @@ mod tests {
         assert!(!rsa_public_key_allowed_by_webpki(&oversized_exponent));
     }
 
-    fn rsa_public_key_with_modulus(modulus: &[u8]) -> RsaPublicKey<'static> {
+    fn rsa_public_key_with_modulus(modulus: &[u8]) -> RsaPublicKeyRef<'static> {
         rsa_public_key_with_components(modulus, &[0x01, 0x00, 0x01])
     }
 
-    fn rsa_public_key_with_exponent(exponent: &[u8]) -> RsaPublicKey<'static> {
+    fn rsa_public_key_with_exponent(exponent: &[u8]) -> RsaPublicKeyRef<'static> {
         rsa_public_key_with_components(&modulus_with_bit_len(2048), exponent)
     }
 
-    fn rsa_public_key_with_components(modulus: &[u8], exponent: &[u8]) -> RsaPublicKey<'static> {
+    fn rsa_public_key_with_components(modulus: &[u8], exponent: &[u8]) -> RsaPublicKeyRef<'static> {
         let mut der = Vec::new();
         append_der_integer(&mut der, modulus);
         append_der_integer(&mut der, exponent);
@@ -495,7 +495,7 @@ mod tests {
         sequence.extend_from_slice(&der);
 
         let sequence: &'static [u8] = Box::leak(sequence.into_boxed_slice());
-        RsaPublicKey::try_from(sequence).unwrap()
+        RsaPublicKeyRef::try_from(sequence).unwrap()
     }
 
     fn modulus_with_bit_len(bit_len: usize) -> Vec<u8> {
