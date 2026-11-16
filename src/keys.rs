@@ -4,7 +4,7 @@
 // Copyright 2026 Datadog, Inc.
 
 //! Import keys to CNG
-use pkcs1::{RsaPrivateKey, RsaPublicKey};
+use pkcs1::{RsaPrivateKeyRef, RsaPublicKeyRef};
 use rustls::Error;
 use windows::{
     core::Owned,
@@ -25,7 +25,7 @@ unsafe impl Send for KeyWrapper {}
 unsafe impl Sync for KeyWrapper {}
 
 pub(crate) fn import_rsa_private_key(
-    key: &RsaPrivateKey<'_>,
+    key: &RsaPrivateKeyRef<'_>,
 ) -> Result<Owned<BCRYPT_KEY_HANDLE>, Error> {
     let modulus = key.modulus.as_bytes();
     let public_exponent = key.public_exponent.as_bytes();
@@ -77,7 +77,7 @@ pub(crate) fn import_rsa_private_key(
 }
 
 pub(crate) fn import_rsa_public_key(
-    key: &RsaPublicKey<'_>,
+    key: &RsaPublicKeyRef<'_>,
 ) -> Result<Owned<BCRYPT_KEY_HANDLE>, Error> {
     let modulus = key.modulus.as_bytes();
     let public_exponent = key.public_exponent.as_bytes();
