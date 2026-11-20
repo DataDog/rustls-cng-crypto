@@ -75,16 +75,23 @@ pub(crate) fn cng_supports_hkdf() -> bool {
 
 fn probe_cng_hkdf() -> bool {
     // Windows Server 2016 (build 14393) CNG has no HKDF algorithm. There, BCRYPT_HKDF_ALG_HANDLE
-    // is not a valid pseudo-handle, and key creation fails with STATUS_INVALID_HANDLE. Run a full
-    // extract and expand for each hash that the cipher suites use, and use the CNG HKDF only on
-    // hosts where all of them succeed.
+    // is not a valid pseudo-handle, and key creation fails with STATUS_INVALID_HANDLE. For each
+    // hash that the cipher suites use, run every CNG HKDF operation that the native path uses:
+    // extract without and with a salt, import of a pseudorandom key, and expand. Use the CNG HKDF
+    // only on hosts where all of them succeed.
     fn probe<const HASH_SIZE: usize>(hash: HashAlgorithm<HASH_SIZE>) -> bool {
-        let Ok(key_handle) = native_extract(hash, None, &[0u8; HASH_SIZE]) else {
-            return false;
+        let expands = |key_handle| {
+            let expander = HkdfExpander { key_handle, hash };
+            let mut output = [0u8; HASH_SIZE];
+            expander.expand_slice(&[b"probe"], &mut output).is_ok()
         };
-        let expander = HkdfExpander { key_handle, hash };
-        let mut output = [0u8; HASH_SIZE];
-        expander.expand_slice(&[b"probe"], &mut output).is_ok()
+
+        let salt = [0x5au8; HASH_SIZE];
+        let secret = [0u8; HASH_SIZE];
+        [None, Some(&salt[..])]
+            .into_iter()
+            .all(|salt| native_extract(hash, salt, &secret).is_ok_and(expands))
+            && native_expander_for_okm(hash, &secret).is_ok_and(expands)
     }
 
     probe(SHA256) && probe(SHA384)
@@ -201,7 +208,7 @@ impl<const HASH_SIZE: usize> RustlsHkdf for Hkdf<HASH_SIZE> {
     }
 }
 
-// required for passing null pointer when setting HDKF_PRK_AND_FINALIZE
+// required for passing null pointer when setting HKDF_PRK_AND_FINALIZE
 // can be removed if switched to windows-sys
 extern "system" {
     fn BCryptSetProperty(
@@ -252,7 +259,7 @@ impl<const HASH_SIZE: usize> RustlsHkdfExpander for HkdfExpander<HASH_SIZE> {
     fn expand_block(&self, info: &[&[u8]]) -> OkmBlock {
         let mut output = [0u8; HASH_SIZE];
         self.expand_slice(info, &mut output)
-            .expect("HDKF-Expand failed");
+            .expect("HKDF-Expand failed");
         OkmBlock::new(&output)
     }
 
@@ -345,21 +352,57 @@ mod test {
         assert_eq!(Hkdf::new(SHA384).fips(), expected);
     }
 
+    /// Checks that the fallback derives the same keys as the CNG HKDF for each operation that the
+    /// TLS 1.3 key schedule uses.
+    fn assert_fallback_matches_cng_hkdf<const HASH_SIZE: usize>(
+        hash: crate::hash::Algorithm<HASH_SIZE>,
+    ) {
+        let native = Hkdf::new(hash);
+        let fallback = Hkdf::fallback(hash);
+        let salt = [0x5au8; HASH_SIZE];
+        let secret = [0xa5u8; HASH_SIZE];
+        let okm = OkmBlock::new(&[0x3cu8; HASH_SIZE]);
+        let info: &[&[u8]] = &[b"tls13 ", b"derived"];
+
+        for salt in [None, Some(&salt[..])] {
+            assert_eq!(
+                native
+                    .extract_from_zero_ikm(salt)
+                    .expand_block(info)
+                    .as_ref(),
+                fallback
+                    .extract_from_zero_ikm(salt)
+                    .expand_block(info)
+                    .as_ref(),
+            );
+            assert_eq!(
+                native
+                    .extract_from_secret(salt, &secret)
+                    .expand_block(info)
+                    .as_ref(),
+                fallback
+                    .extract_from_secret(salt, &secret)
+                    .expand_block(info)
+                    .as_ref(),
+            );
+        }
+        assert_eq!(
+            native.expander_for_okm(&okm).expand_block(info).as_ref(),
+            fallback.expander_for_okm(&okm).expand_block(info).as_ref(),
+        );
+        assert_eq!(
+            native.hmac_sign(&okm, b"message").as_ref(),
+            fallback.hmac_sign(&okm, b"message").as_ref(),
+        );
+    }
+
     #[test]
     fn hkdf_fallback_matches_cng_hkdf() {
         if !super::cng_supports_hkdf() {
             return;
         }
 
-        let native = Hkdf::new(SHA384);
-        let fallback = Hkdf::fallback(SHA384);
-        let salt = [0x5au8; 48];
-        let info: &[&[u8]] = &[b"tls13 ", b"derived"];
-
-        for salt in [None, Some(&salt[..])] {
-            let native_okm = native.extract_from_zero_ikm(salt).expand_block(info);
-            let fallback_okm = fallback.extract_from_zero_ikm(salt).expand_block(info);
-            assert_eq!(native_okm.as_ref(), fallback_okm.as_ref());
-        }
+        assert_fallback_matches_cng_hkdf(SHA256);
+        assert_fallback_matches_cng_hkdf(SHA384);
     }
 }

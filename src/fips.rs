@@ -39,7 +39,8 @@ fn enabled_from_query_result(query_succeeded: bool, enabled: u8) -> bool {
 ///
 /// On hosts without a CNG HKDF algorithm, such as Windows Server 2016, the TLS 1.3 cipher suites
 /// use an HKDF composed from CNG HMAC. These cipher suites do not report FIPS status, so this
-/// provider leaves them out.
+/// provider leaves them out. The TLS 1.2 cipher suites remain. Without the `tls12` feature, the
+/// provider then has no cipher suites, and building a TLS configuration from it fails.
 pub fn provider() -> CryptoProvider {
     CryptoProvider {
         cipher_suites: default_cipher_suites()

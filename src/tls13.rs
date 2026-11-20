@@ -247,11 +247,34 @@ mod test {
         }
     }
 
-    /// Completes a TLS 1.3 handshake in memory. The client uses the HMAC HKDF fallback, and the
-    /// server uses the cipher suite from the default provider.
+    #[test]
+    fn hkdf_fallback_cipher_suites_are_not_fips() {
+        // Rustls reports a TLS 1.3 cipher suite as FIPS only when its HKDF is, so a FIPS provider
+        // never keeps a cipher suite that uses the fallback.
+        assert!(!TLS13_AES_256_GCM_SHA384_HKDF_FALLBACK.fips());
+        assert!(!TLS13_AES_128_GCM_SHA256_HKDF_FALLBACK.fips());
+    }
+
+    /// Completes a TLS 1.3 handshake in memory, with one peer on the HMAC HKDF fallback and the
+    /// other on the cipher suite from the default provider. On hosts with the CNG HKDF algorithm,
+    /// this checks the fallback against it.
     #[rstest::rstest]
-    #[case::aes_256_gcm_sha384(TLS13_AES_256_GCM_SHA384_HKDF_FALLBACK, TLS13_AES_256_GCM_SHA384)]
-    #[case::aes_128_gcm_sha256(TLS13_AES_128_GCM_SHA256_HKDF_FALLBACK, TLS13_AES_128_GCM_SHA256)]
+    #[case::client_fallback_aes_256_gcm_sha384(
+        TLS13_AES_256_GCM_SHA384_HKDF_FALLBACK,
+        TLS13_AES_256_GCM_SHA384
+    )]
+    #[case::client_fallback_aes_128_gcm_sha256(
+        TLS13_AES_128_GCM_SHA256_HKDF_FALLBACK,
+        TLS13_AES_128_GCM_SHA256
+    )]
+    #[case::server_fallback_aes_256_gcm_sha384(
+        TLS13_AES_256_GCM_SHA384,
+        TLS13_AES_256_GCM_SHA384_HKDF_FALLBACK
+    )]
+    #[case::server_fallback_aes_128_gcm_sha256(
+        TLS13_AES_128_GCM_SHA256,
+        TLS13_AES_128_GCM_SHA256_HKDF_FALLBACK
+    )]
     fn tls13_handshake_with_hkdf_fallback(
         #[case] client_suite: SupportedCipherSuite,
         #[case] server_suite: SupportedCipherSuite,

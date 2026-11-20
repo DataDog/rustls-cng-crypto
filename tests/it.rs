@@ -210,6 +210,10 @@ fn test_to_internet(
     #[case] group: &'static dyn SupportedKxGroup,
     #[case] expected: CipherSuite,
 ) {
+    if !cng_supports_group(group) || !cng_supports_suite(suite) {
+        return;
+    }
+
     let cipher_suites = vec![suite];
     let kx_group = vec![group];
 
