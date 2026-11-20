@@ -26,6 +26,13 @@ fn cng_supports_group(group: &'static dyn SupportedKxGroup) -> bool {
         .any(|supported| supported.name() == group.name())
 }
 
+fn cng_supports_suite(suite: SupportedCipherSuite) -> bool {
+    default_provider()
+        .cipher_suites
+        .iter()
+        .any(|supported| supported.suite() == suite.suite())
+}
+
 fn test_with_provider(
     provider: CryptoProvider,
     port: u16,
@@ -173,7 +180,7 @@ fn test_client_and_server(
     #[case] alg: &'static rcgen::SignatureAlgorithm,
     #[case] expected: CipherSuite,
 ) {
-    if !cng_supports_group(group) {
+    if !cng_supports_group(group) || !cng_supports_suite(suite) {
         return;
     }
 

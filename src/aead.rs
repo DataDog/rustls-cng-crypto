@@ -3,6 +3,7 @@
 // This product includes software developed at Datadog (https://www.datadoghq.com/)
 // Copyright 2026 Datadog, Inc.
 
+use once_cell::sync::Lazy;
 use rustls::crypto::cipher::NONCE_LEN;
 use rustls::Error;
 use windows::core::Owned;
@@ -134,6 +135,19 @@ pub(crate) const CHACHA20_POLY1305: Algorithm = Algorithm {
 
 unsafe impl Send for Algorithm {}
 unsafe impl Sync for Algorithm {}
+
+static CNG_SUPPORTS_CHACHA20_POLY1305: Lazy<bool> =
+    Lazy::new(|| CHACHA20_POLY1305.with_key(&[0u8; 32]).is_ok());
+
+/// Returns whether the host CNG implementation provides ChaCha20-Poly1305.
+///
+/// Older Windows versions, such as Windows Server 2016, have no CNG ChaCha20-Poly1305 algorithm.
+/// There, BCRYPT_CHACHA20_POLY1305_ALG_HANDLE is not a valid pseudo-handle, and key creation fails.
+/// The provider constructors use this probe to leave out ChaCha20-Poly1305 cipher suites on those
+/// hosts.
+pub(crate) fn cng_supports_chacha20_poly1305() -> bool {
+    *CNG_SUPPORTS_CHACHA20_POLY1305
+}
 
 pub(crate) struct AeadKey {
     handle: Owned<BCRYPT_KEY_HANDLE>,
@@ -287,6 +301,10 @@ mod test {
     #[case::aes256gcm(AES_256_GCM, wycheproof::aead::TestName::AesGcm)]
     #[case::chacha20poly1305(CHACHA20_POLY1305, wycheproof::aead::TestName::ChaCha20Poly1305)]
     fn roundtrip(#[case] alg: Algorithm, #[case] test_name: TestName) {
+        if !alg.is_aes() && !super::cng_supports_chacha20_poly1305() {
+            return;
+        }
+
         let test_set = wycheproof::aead::TestSet::load(test_name).unwrap();
         let mut counter = 0;
 
@@ -356,5 +374,12 @@ mod test {
 
         // Ensure we ran some tests.
         assert!(counter > 50);
+    }
+
+    #[test]
+    fn chacha20_poly1305_capability_probe_does_not_panic() {
+        let _supported = std::panic::catch_unwind(super::cng_supports_chacha20_poly1305).expect(
+            "ChaCha20-Poly1305 capability probing should return false instead of panicking",
+        );
     }
 }
