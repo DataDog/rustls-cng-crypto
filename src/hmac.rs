@@ -82,6 +82,15 @@ mod test {
     use rustls::crypto::hmac::{Hmac as _, Tag};
     use wycheproof::TestResult;
 
+    #[test]
+    fn hmac_capability_probe_finds_cng_hmac() {
+        // Supported Windows versions all provide CNG HMAC with SHA-256 and SHA-384. A probe that
+        // returns false here would drop the TLS 1.3 cipher suites on hosts without CNG HKDF.
+        assert!(super::cng_supports_hmac());
+        assert!(super::probe_hmac(SHA256));
+        assert!(super::probe_hmac(SHA384));
+    }
+
     #[rstest::rstest]
     #[case(SHA256)]
     #[case(SHA384)]
