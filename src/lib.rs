@@ -73,14 +73,27 @@
 //! 4. Validate the FIPS status of your `ClientConfig` or `ServerConfig` at runtime. See the rustls
 //!    [FIPS status documentation](https://docs.rs/rustls/latest/rustls/manual/_06_fips/index.html#3-validate-the-fips-status-of-your-clientconfigserverconfig-at-run-time).
 //!
+//! On hosts without a CNG HKDF algorithm, such as Windows Server 2016, the TLS 1.3 cipher suites
+//! use an HKDF composed from CNG HMAC. That HKDF does not report FIPS status, so
+//! [`fips_provider()`] leaves out the TLS 1.3 cipher suites on those hosts.
+//!
 //! ## Platform support
 //!
 //! This crate uses Windows CNG APIs and only builds for Windows targets. From non-Windows hosts,
 //! run checks and documentation builds with an explicit Windows target such as
 //! `--target x86_64-pc-windows-msvc`.
+//!
+//! Some CNG algorithms are not available on all Windows versions. The crate probes the host CNG
+//! implementation once, at first use:
+//!
+//! * If CNG has no HKDF algorithm, such as on Windows Server 2016, the TLS 1.3 cipher suites
+//!   compose HKDF from CNG HMAC.
+//! * If CNG has no ChaCha20-Poly1305 algorithm, [`default_provider()`] and [`fips_provider()`]
+//!   leave out the ChaCha20-Poly1305 cipher suites.
+//! * If CNG cannot use X25519, [`default_provider()`] and [`fips_provider()`] leave out X25519.
 #![warn(missing_docs)]
 use rustls::crypto::{CryptoProvider, GetRandomFailed, SupportedKxGroup};
-use rustls::SupportedCipherSuite;
+use rustls::{CipherSuite, SupportedCipherSuite};
 
 use windows::Win32::Security::Cryptography::{BCryptGenRandom, BCRYPT_USE_SYSTEM_PREFERRED_RNG};
 
@@ -130,6 +143,9 @@ pub use verify::SUPPORTED_SIG_ALGS;
 
 /// Returns a CNG-based [`CryptoProvider`] using all available cipher suites ([`ALL_CIPHER_SUITES`]) and key exchange groups ([`ALL_KX_GROUPS`]).
 ///
+/// The provider leaves out cipher suites and key exchange groups that the host CNG implementation
+/// does not support. For example, Windows Server 2016 has no CNG ChaCha20-Poly1305 algorithm.
+///
 /// Sample usage:
 /// ```rust
 /// use rustls::{ClientConfig, RootCertStore};
@@ -154,7 +170,7 @@ pub use verify::SUPPORTED_SIG_ALGS;
 #[cfg(not(feature = "fips"))]
 pub fn default_provider() -> CryptoProvider {
     CryptoProvider {
-        cipher_suites: ALL_CIPHER_SUITES.to_vec(),
+        cipher_suites: default_cipher_suites(),
         kx_groups: kx::default_kx_groups(),
         signature_verification_algorithms: SUPPORTED_SIG_ALGS,
         secure_random: &SecureRandom,
@@ -166,6 +182,12 @@ pub fn default_provider() -> CryptoProvider {
 ///
 /// The specified cipher suites and key exchange groups should be defined in descending order of preference.
 /// i.e the first elements have the highest priority during negotiation.
+///
+/// This function uses the given cipher suites as they are. Some hosts lack CNG algorithms that
+/// some cipher suites need, for example ChaCha20-Poly1305 on Windows Server 2016, and a handshake
+/// that negotiates such a cipher suite panics there. To use only cipher suites that the host
+/// supports, select them from `default_provider().cipher_suites` rather than from
+/// [`ALL_CIPHER_SUITES`] or the [`cipher_suite`] module.
 ///
 /// Sample usage:
 /// ```rust
@@ -220,6 +242,9 @@ pub fn custom_provider(
 /// * `TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256`
 ///
 /// If the default `tls12` feature is disabled then the TLS 1.2 cipher suites will not be included.
+///
+/// This list includes cipher suites that the host CNG implementation may not support. The default
+/// and FIPS providers leave those out. See [`custom_provider`].
 pub static ALL_CIPHER_SUITES: &[SupportedCipherSuite] = &[
     tls13::TLS13_AES_256_GCM_SHA384,
     tls13::TLS13_AES_128_GCM_SHA256,
@@ -238,6 +263,52 @@ pub static ALL_CIPHER_SUITES: &[SupportedCipherSuite] = &[
     tls12::TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
 ];
 
+/// Returns the cipher suites from [`ALL_CIPHER_SUITES`] that the host CNG implementation supports.
+fn default_cipher_suites() -> Vec<SupportedCipherSuite> {
+    supported_cipher_suites(ALL_CIPHER_SUITES, HostSupport::detect())
+}
+
+/// The CNG algorithms that decide which cipher suites a host can use.
+#[derive(Clone, Copy, Debug)]
+struct HostSupport {
+    /// Whether CNG provides ChaCha20-Poly1305.
+    chacha20_poly1305: bool,
+    /// Whether the TLS 1.3 key schedule can run. It needs the CNG HKDF algorithm, or CNG HMAC for
+    /// the HKDF fallback.
+    tls13_key_schedule: bool,
+}
+
+impl HostSupport {
+    fn detect() -> Self {
+        Self {
+            chacha20_poly1305: aead::cng_supports_chacha20_poly1305(),
+            tls13_key_schedule: hkdf::cng_supports_hkdf() || hmac::cng_supports_hmac(),
+        }
+    }
+}
+
+/// Returns the cipher suites from `suites` that a host with `host` support can use, in order.
+fn supported_cipher_suites(
+    suites: &[SupportedCipherSuite],
+    host: HostSupport,
+) -> Vec<SupportedCipherSuite> {
+    suites
+        .iter()
+        .copied()
+        .filter(|suite| host.chacha20_poly1305 || !is_chacha20_poly1305(suite.suite()))
+        .filter(|suite| host.tls13_key_schedule || suite.tls13().is_none())
+        .collect()
+}
+
+fn is_chacha20_poly1305(suite: CipherSuite) -> bool {
+    matches!(
+        suite,
+        CipherSuite::TLS13_CHACHA20_POLY1305_SHA256
+            | CipherSuite::TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256
+            | CipherSuite::TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256
+    )
+}
+
 /// A struct that implements [`rustls::crypto::SecureRandom`] using CNG.
 #[derive(Debug)]
 pub struct SecureRandom;
@@ -253,5 +324,84 @@ impl rustls::crypto::SecureRandom for SecureRandom {
 
     fn fips(&self) -> bool {
         fips::enabled()
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use rustls::{CipherSuite, SupportedCipherSuite};
+
+    use super::{
+        default_cipher_suites, is_chacha20_poly1305, supported_cipher_suites, HostSupport,
+        ALL_CIPHER_SUITES,
+    };
+
+    fn suite_ids(suites: &[SupportedCipherSuite]) -> Vec<CipherSuite> {
+        suites.iter().map(|suite| suite.suite()).collect()
+    }
+
+    fn supported_ids(host: HostSupport) -> Vec<CipherSuite> {
+        suite_ids(&supported_cipher_suites(ALL_CIPHER_SUITES, host))
+    }
+
+    fn expected_ids(keep: impl Fn(&SupportedCipherSuite) -> bool) -> Vec<CipherSuite> {
+        ALL_CIPHER_SUITES
+            .iter()
+            .filter(|suite| keep(suite))
+            .map(|suite| suite.suite())
+            .collect()
+    }
+
+    #[test]
+    fn host_with_all_algorithms_keeps_all_cipher_suites() {
+        let host = HostSupport {
+            chacha20_poly1305: true,
+            tls13_key_schedule: true,
+        };
+        assert_eq!(supported_ids(host), suite_ids(ALL_CIPHER_SUITES));
+    }
+
+    #[test]
+    fn host_without_chacha20_poly1305_drops_only_chacha20_poly1305_suites() {
+        let host = HostSupport {
+            chacha20_poly1305: false,
+            tls13_key_schedule: true,
+        };
+        assert_eq!(
+            supported_ids(host),
+            expected_ids(|suite| !is_chacha20_poly1305(suite.suite()))
+        );
+    }
+
+    #[test]
+    fn host_without_tls13_key_schedule_drops_only_tls13_suites() {
+        let host = HostSupport {
+            chacha20_poly1305: true,
+            tls13_key_schedule: false,
+        };
+        assert_eq!(
+            supported_ids(host),
+            expected_ids(|suite| suite.tls13().is_none())
+        );
+    }
+
+    #[test]
+    fn host_without_either_drops_both() {
+        let host = HostSupport {
+            chacha20_poly1305: false,
+            tls13_key_schedule: false,
+        };
+        assert_eq!(
+            supported_ids(host),
+            expected_ids(|suite| suite.tls13().is_none() && !is_chacha20_poly1305(suite.suite()))
+        );
+    }
+
+    #[test]
+    fn default_cipher_suites_follow_detected_host_support() {
+        assert_eq!(
+            suite_ids(&default_cipher_suites()),
+            supported_ids(HostSupport::detect())
+        );
     }
 }

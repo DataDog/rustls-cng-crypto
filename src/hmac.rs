@@ -3,11 +3,38 @@
 // This product includes software developed at Datadog (https://www.datadoghq.com/)
 // Copyright 2026 Datadog, Inc.
 
-use crate::hash::{Algorithm, Context};
+use crate::hash::{Algorithm, Context, SHA256, SHA384};
+use once_cell::sync::Lazy;
 use rustls::crypto::hash::Context as _;
 use rustls::crypto::hmac::{Key, Tag};
 use windows::core::Owned;
-use windows::Win32::Security::Cryptography::BCryptCreateHash;
+use windows::Win32::Security::Cryptography::{BCryptCreateHash, BCRYPT_HASH_HANDLE};
+
+static CNG_SUPPORTS_HMAC: Lazy<bool> = Lazy::new(|| probe_hmac(SHA256) && probe_hmac(SHA384));
+
+/// Returns whether the host CNG implementation provides HMAC with each hash that the TLS 1.3
+/// cipher suites use.
+///
+/// On hosts without the CNG HKDF algorithm, the TLS 1.3 key schedule composes HKDF from CNG HMAC,
+/// so it needs HMAC to be available.
+pub(crate) fn cng_supports_hmac() -> bool {
+    *CNG_SUPPORTS_HMAC
+}
+
+fn probe_hmac<const SIZE: usize>(alg: Algorithm<SIZE>) -> bool {
+    let mut hash_handle = Owned::<BCRYPT_HASH_HANDLE>::default();
+    unsafe {
+        BCryptCreateHash(
+            alg.hmac_handle(),
+            &mut *hash_handle,
+            None,
+            Some(&[0u8; SIZE]),
+            0,
+        )
+        .ok()
+        .is_ok()
+    }
+}
 
 impl<const SIZE: usize> rustls::crypto::hmac::Hmac for Algorithm<SIZE> {
     fn with_key(&self, key: &[u8]) -> Box<dyn Key> {
@@ -54,6 +81,15 @@ mod test {
     use crate::hash::{Algorithm, SHA256, SHA384};
     use rustls::crypto::hmac::{Hmac as _, Tag};
     use wycheproof::TestResult;
+
+    #[test]
+    fn hmac_capability_probe_finds_cng_hmac() {
+        // Supported Windows versions all provide CNG HMAC with SHA-256 and SHA-384. A probe that
+        // returns false here would drop the TLS 1.3 cipher suites on hosts without CNG HKDF.
+        assert!(super::cng_supports_hmac());
+        assert!(super::probe_hmac(SHA256));
+        assert!(super::probe_hmac(SHA384));
+    }
 
     #[rstest::rstest]
     #[case(SHA256)]
