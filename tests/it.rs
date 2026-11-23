@@ -26,6 +26,40 @@ fn cng_supports_group(group: &'static dyn SupportedKxGroup) -> bool {
         .any(|supported| supported.name() == group.name())
 }
 
+/// Returns whether the host CNG implementation supports the AEAD that `suite` uses.
+///
+/// This probes CNG directly rather than checking `default_provider()`, because with the `fips`
+/// feature `default_provider()` is the FIPS provider, which leaves out every cipher suite on hosts
+/// that are not in FIPS mode.
+fn cng_supports_suite(suite: SupportedCipherSuite) -> bool {
+    let is_chacha20_poly1305 = matches!(
+        suite.suite(),
+        CipherSuite::TLS13_CHACHA20_POLY1305_SHA256
+            | CipherSuite::TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256
+            | CipherSuite::TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256
+    );
+    !is_chacha20_poly1305 || cng_supports_chacha20_poly1305()
+}
+
+fn cng_supports_chacha20_poly1305() -> bool {
+    use windows::core::Owned;
+    use windows::Win32::Security::Cryptography::{
+        BCryptGenerateSymmetricKey, BCRYPT_CHACHA20_POLY1305_ALG_HANDLE, BCRYPT_KEY_HANDLE,
+    };
+
+    let mut key_handle = Owned::<BCRYPT_KEY_HANDLE>::default();
+    unsafe {
+        BCryptGenerateSymmetricKey(
+            BCRYPT_CHACHA20_POLY1305_ALG_HANDLE,
+            &mut *key_handle,
+            None,
+            &[0u8; 32],
+            0,
+        )
+        .is_ok()
+    }
+}
+
 fn test_with_provider(
     provider: CryptoProvider,
     port: u16,
@@ -173,7 +207,7 @@ fn test_client_and_server(
     #[case] alg: &'static rcgen::SignatureAlgorithm,
     #[case] expected: CipherSuite,
 ) {
-    if !cng_supports_group(group) {
+    if !cng_supports_group(group) || !cng_supports_suite(suite) {
         return;
     }
 
@@ -203,6 +237,10 @@ fn test_to_internet(
     #[case] group: &'static dyn SupportedKxGroup,
     #[case] expected: CipherSuite,
 ) {
+    if !cng_supports_group(group) || !cng_supports_suite(suite) {
+        return;
+    }
+
     let cipher_suites = vec![suite];
     let kx_group = vec![group];
 
