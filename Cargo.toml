@@ -5,11 +5,10 @@
 
 [package]
 name = "rustls-cng-crypto"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
 license = "MIT"
 description = "Rustls crypto provider for CNG"
-homepage = "https://github.com/DataDog/rustls-cng-crypto"
 repository = "https://github.com/DataDog/rustls-cng-crypto"
 readme = "README.md"
 exclude = [
