@@ -202,10 +202,17 @@ impl<const HASH_SIZE: usize> RustlsHkdf for Hkdf<HASH_SIZE> {
     }
 
     fn fips(&self) -> bool {
-        // The HMAC fallback composes HKDF outside of the CNG key derivation function. Only the CNG
-        // HKDF reports FIPS status.
-        self.uses_native() && crate::fips::enabled()
+        fips_status(self.uses_native(), crate::fips::enabled())
     }
+}
+
+/// Returns whether an HKDF reports FIPS status, given whether it uses the CNG HKDF algorithm and
+/// whether Windows runs in FIPS mode.
+///
+/// The HMAC fallback composes HKDF outside of the CNG key derivation function, so only the CNG
+/// HKDF reports FIPS status, and only in FIPS mode.
+fn fips_status(uses_native: bool, fips_enabled: bool) -> bool {
+    uses_native && fips_enabled
 }
 
 // required for passing null pointer when setting HKDF_PRK_AND_FINALIZE
@@ -340,16 +347,29 @@ mod test {
     }
 
     #[test]
-    fn hkdf_fallback_is_not_fips() {
-        assert!(!Hkdf::fallback(SHA256).fips());
-        assert!(!Hkdf::fallback(SHA384).fips());
+    fn fips_status_requires_cng_hkdf_and_fips_mode() {
+        // Only the CNG HKDF in FIPS mode reports FIPS status. The fallback never does, even in
+        // FIPS mode, and no HKDF does outside FIPS mode.
+        assert!(super::fips_status(true, true));
+        assert!(!super::fips_status(false, true));
+        assert!(!super::fips_status(true, false));
+        assert!(!super::fips_status(false, false));
     }
 
     #[test]
-    fn hkdf_fips_requires_cng_hkdf() {
-        let expected = super::cng_supports_hkdf() && crate::fips::enabled();
-        assert_eq!(Hkdf::new(SHA256).fips(), expected);
-        assert_eq!(Hkdf::new(SHA384).fips(), expected);
+    fn hkdf_fallback_never_uses_cng_hkdf() {
+        // This holds on every host, so together with `fips_status` it shows the fallback never
+        // reports FIPS status, even on hosts that are not in FIPS mode.
+        assert!(!Hkdf::fallback(SHA256).uses_native());
+        assert!(!Hkdf::fallback(SHA384).uses_native());
+    }
+
+    #[test]
+    fn hkdf_fallback_is_not_fips() {
+        // Outside FIPS mode no HKDF reports FIPS status, so this only discriminates on FIPS-mode
+        // hosts. `fips_status_requires_cng_hkdf_and_fips_mode` covers the logic on every host.
+        assert!(!Hkdf::fallback(SHA256).fips());
+        assert!(!Hkdf::fallback(SHA384).fips());
     }
 
     /// Checks that the fallback derives the same keys as the CNG HKDF for each operation that the

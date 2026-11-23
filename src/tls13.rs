@@ -250,7 +250,9 @@ mod test {
     #[test]
     fn hkdf_fallback_cipher_suites_are_not_fips() {
         // Rustls reports a TLS 1.3 cipher suite as FIPS only when its HKDF is, so a FIPS provider
-        // never keeps a cipher suite that uses the fallback.
+        // never keeps a cipher suite that uses the fallback. Rustls checks the hash first, which
+        // reports FIPS status only in FIPS mode, so this only discriminates on FIPS-mode hosts.
+        // `hkdf::test::fips_status_requires_cng_hkdf_and_fips_mode` covers the logic everywhere.
         assert!(!TLS13_AES_256_GCM_SHA384_HKDF_FALLBACK.fips());
         assert!(!TLS13_AES_128_GCM_SHA256_HKDF_FALLBACK.fips());
     }

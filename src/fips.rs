@@ -79,10 +79,20 @@ mod tests {
     #[test]
     fn fips_provider_has_fips_cipher_suites() {
         let provider = provider();
-        assert!(!provider.cipher_suites.is_empty());
+        let cng_hkdf = crate::hkdf::cng_supports_hkdf();
+        // Without the `tls12` feature, a host without the CNG HKDF algorithm has no FIPS cipher
+        // suites at all, as the provider's documentation says.
+        if cng_hkdf || cfg!(feature = "tls12") {
+            assert!(!provider.cipher_suites.is_empty());
+        }
         assert!(!provider.kx_groups.is_empty());
         assert!(provider.fips());
-        assert!(provider.cipher_suites.iter().any(|cs| cs.tls13().is_some()));
+        // The TLS 1.3 cipher suites use the HMAC HKDF fallback on hosts without the CNG HKDF
+        // algorithm. The fallback does not report FIPS status, so the provider leaves them out.
+        assert_eq!(
+            provider.cipher_suites.iter().any(|cs| cs.tls13().is_some()),
+            cng_hkdf
+        );
         #[cfg(feature = "tls12")]
         assert!(provider.cipher_suites.iter().any(|cs| cs.tls13().is_none()));
         dbg!(provider);

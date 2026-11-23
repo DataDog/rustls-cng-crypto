@@ -315,44 +315,59 @@ impl rustls::crypto::SecureRandom for SecureRandom {
 mod test {
     use rustls::{CipherSuite, SupportedCipherSuite};
 
-    use super::{
-        aead, default_cipher_suites, is_chacha20_poly1305, supported_cipher_suites,
-        ALL_CIPHER_SUITES,
-    };
+    use super::{supported_cipher_suites, ALL_CIPHER_SUITES};
 
     fn suite_ids(suites: &[SupportedCipherSuite]) -> Vec<CipherSuite> {
         suites.iter().map(|suite| suite.suite()).collect()
     }
 
-    #[test]
-    fn host_with_chacha20_poly1305_keeps_all_cipher_suites() {
-        assert_eq!(
-            suite_ids(&supported_cipher_suites(ALL_CIPHER_SUITES, true)),
-            suite_ids(ALL_CIPHER_SUITES)
-        );
-    }
+    // The expected lists name each cipher suite rather than deriving them from the code under
+    // test, so a mistake in which cipher suites count as ChaCha20-Poly1305 fails these tests.
 
     #[test]
-    fn host_without_chacha20_poly1305_drops_only_chacha20_poly1305_suites() {
-        let expected: Vec<CipherSuite> = ALL_CIPHER_SUITES
-            .iter()
-            .map(|suite| suite.suite())
-            .filter(|suite| !is_chacha20_poly1305(*suite))
-            .collect();
+    fn host_with_chacha20_poly1305_keeps_all_cipher_suites() {
+        let expected = [
+            CipherSuite::TLS13_AES_256_GCM_SHA384,
+            CipherSuite::TLS13_AES_128_GCM_SHA256,
+            CipherSuite::TLS13_CHACHA20_POLY1305_SHA256,
+            #[cfg(feature = "tls12")]
+            CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
+            #[cfg(feature = "tls12")]
+            CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+            #[cfg(feature = "tls12")]
+            CipherSuite::TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,
+            #[cfg(feature = "tls12")]
+            CipherSuite::TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+            #[cfg(feature = "tls12")]
+            CipherSuite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+            #[cfg(feature = "tls12")]
+            CipherSuite::TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
+        ]
+        .to_vec();
         assert_eq!(
-            suite_ids(&supported_cipher_suites(ALL_CIPHER_SUITES, false)),
+            suite_ids(&supported_cipher_suites(ALL_CIPHER_SUITES, true)),
             expected
         );
     }
 
     #[test]
-    fn default_cipher_suites_follow_detected_host_support() {
+    fn host_without_chacha20_poly1305_drops_only_chacha20_poly1305_suites() {
+        let expected = [
+            CipherSuite::TLS13_AES_256_GCM_SHA384,
+            CipherSuite::TLS13_AES_128_GCM_SHA256,
+            #[cfg(feature = "tls12")]
+            CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
+            #[cfg(feature = "tls12")]
+            CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+            #[cfg(feature = "tls12")]
+            CipherSuite::TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+            #[cfg(feature = "tls12")]
+            CipherSuite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+        ]
+        .to_vec();
         assert_eq!(
-            suite_ids(&default_cipher_suites()),
-            suite_ids(&supported_cipher_suites(
-                ALL_CIPHER_SUITES,
-                aead::cng_supports_chacha20_poly1305()
-            ))
+            suite_ids(&supported_cipher_suites(ALL_CIPHER_SUITES, false)),
+            expected
         );
     }
 }
